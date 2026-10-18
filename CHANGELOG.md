@@ -1,6 +1,9 @@
 # What's new in Grapevine
 
-## 0.8.0 (current)
+## 0.8.1 (current)
+- Records that Stream Multiview 0.3.11 shipped `drops.farming@1.0` and `players@1.0`: those versions can't change in place now, and Stream Multiview's first release with them is 0.3.11, for "update Stream Multiview to 0.3.11 or later".
+
+## 0.8.0
 - `link.on('message', …)`, for an activity log: every message your app sends to or receives from another app, the hello included. Each one says when, which app, sent or received, whether it's a request, reply, error or event, its method, its size, and for a reply how long the answer took. Requests, replies and events include what they carry; an error only its code and message; the hello and the pairing proofs nothing, since they hold the pairing keys. Nothing is worked out for it unless the app listens.
 
 ## 0.7.3
