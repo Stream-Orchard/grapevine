@@ -1,6 +1,9 @@
 # What's new in Grapevine
 
-## 0.7.1 (current)
+## 0.7.2 (current)
+- The README starts the stand-in for launch tests from the installed package by its path, not with `npx`, which could fetch a package of that name.
+
+## 0.7.1
 - The docs run the check as an app's npm script (`npm run grapevine:check`), never `npx grapevine-check`, which would fetch a package of that name from npm when Grapevine isn't installed.
 
 ## 0.7.0
