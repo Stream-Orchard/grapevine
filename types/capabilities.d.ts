@@ -56,6 +56,8 @@ export type DropsFarmingV1State = {
     rewards?: {
       claimed: number;
       total: number;
+      /** Every reward of the drop, in the order they unlock */
+      items?: Array<DropsFarmingV1Reward>;
     };
     /** The reward being worked towards */
     next?: {
@@ -72,6 +74,17 @@ export type DropsFarmingV1State = {
     title?: string;
     viewers?: number;
   } | null;
+};
+
+export type DropsFarmingV1Reward = {
+  name: string;
+  image?: Image;
+  /** Minutes of watching it unlocks at */
+  required: number;
+  /** ready: unlocked, waiting to be claimed */
+  state: "claimed" | "ready" | "locked" | (string & {});
+  /** For a locked one: when it should unlock, at the current rate */
+  unlocksAt?: Timestamp | null;
 };
 
 // players 1.0: An app's stream players, by site: whether they're signed in, and which channels are open. Provided by Stream Multiview.
