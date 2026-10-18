@@ -92,6 +92,7 @@ Editors suggest every event's fields and underline mistakes, in plain JavaScript
 | `keyHeldBy`                           | For `pair-again`: `us` means show **Pair again** here, `them` means it's pressed in the other app          |
 | `version`, `report.text`              | While connected: its version, and "Works" or what's missing ("update Pear Drops to 0.1.7 or later")        |
 | `pairedAt`, `keysEncrypted`           | When they paired, and whether keys are stored encrypted                                                    |
+| `formerIds`                           | Ids the app had before a rename                                                                            |
 
 Two calls go with buttons on the card:
 
@@ -137,6 +138,12 @@ To change one, follow [the version rules](PROTOCOL.md#versions): additions are a
 ## Adding an app
 
 Add it to `src/known-apps.js`, with its id, slug, summary, a 256×256 logo in `assets/apps/`, its download page and its data folder's name. Every app that updates Grapevine then shows it on its Connected apps page.
+
+## Renaming an app
+
+If your app's id changes, list the old one: `createLink({ app: { id: 'com.new.id', formerIds: ['com.old.id'], … } })`. Apps paired with it carry on without pairing again. Then add the new id to `src/known-apps.js`, with the old one in its `formerIds`.
+
+When another app was renamed, `link.currentId(oldId)` gives its new id, so you can move your own settings across (its Connect switch, say). [`PROTOCOL.md`](PROTOCOL.md#renaming-an-app) has the details.
 
 ## Developing
 

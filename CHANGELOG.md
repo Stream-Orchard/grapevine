@@ -1,6 +1,10 @@
 # What's new in Grapevine
 
-## 0.1.1 (current)
+## 0.2.0 (current)
+- An app can be renamed: its hello lists the ids it had before (`formerIds`, `[]` until then), and apps paired with it carry on without pairing again. `link.currentId()` gives an app's new id from an old one.
+- Of two apps, the one whose slug sorts first connects (it was the id), so a rename never changes which one connects.
+
+## 0.1.1
 - Published from GitHub with provenance: npm shows the commit and workflow that built it. The code is the same as 0.1.0.
 
 ## 0.1.0

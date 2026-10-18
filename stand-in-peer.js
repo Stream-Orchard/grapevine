@@ -26,13 +26,27 @@ const { createLink, KNOWN_APPS, memoryKeyStore } = require('./src');
  * @param {(appId: string) => boolean} [o.allowed] its switch (default: on for every app)
  * @param {object} [o.timing]
  * @param {import('./src/keys').KeyStore} [o.keys]
+ * @param {string} [o.id] a new id to answer with in place of the known app's (to test a rename)
+ * @param {string[]} [o.formerIds]
  */
-async function standInPeer({ as, dir, version = '99.0.0', provides = {}, uses = {}, allowed = () => true, timing, keys = memoryKeyStore() }) {
+async function standInPeer({
+  as,
+  dir,
+  version = '99.0.0',
+  provides = {},
+  uses = {},
+  allowed = () => true,
+  timing,
+  keys = memoryKeyStore(),
+  id,
+  formerIds = [],
+}) {
   const known = KNOWN_APPS.find((a) => a.id === as);
   if (!known) throw new Error(`stand-in-peer: ${as} isn't a known app`);
   const link = createLink({
     app: {
-      id: known.id,
+      id: id ?? known.id,
+      formerIds,
       slug: known.slug,
       name: `${known.name} (stand-in)`,
       version,

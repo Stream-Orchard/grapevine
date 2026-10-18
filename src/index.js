@@ -20,7 +20,7 @@ const POLL_MS = 5000;
 
 /**
  * @typedef {object} LinkOptions
- * @property {{id: string, slug: string, name: string, version: string, summary?: string, icon?: string, homepage?: string, download?: string}} app
+ * @property {{id: string, slug: string, name: string, version: string, formerIds?: string[], summary?: string, icon?: string, homepage?: string, download?: string}} app
  *   This app, as other apps will see it. `icon` may be a PNG data URL or a file path.
  * @property {Record<string, string | string[]>} [provides] capabilities this app provides, e.g. { 'drops.farming': '1.0' }
  * @property {Record<string, string | string[]>} [uses] capabilities it uses, e.g. { players: '1.0' }
@@ -40,7 +40,8 @@ class Link extends EventEmitter {
   constructor(opts) {
     super();
     const icon = opts.app.icon && !opts.app.icon.startsWith('data:') ? iconDataUrl(opts.app.icon) : opts.app.icon;
-    this.self = { ...opts.app, ...(icon ? { icon } : {}) };
+    // formerIds: ids this app had before a rename, so apps paired with it then still know it. Sent every time, [] until then.
+    this.self = { ...opts.app, formerIds: opts.app.formerIds ?? [], ...(icon ? { icon } : {}) };
     const problems = hs.checkApp(this.self);
     if (problems.length) throw new Error(`createLink: ${problems.join('; ')}`);
     this.mine = { provides: hs.normalizeList(opts.provides), uses: hs.normalizeList(opts.uses) };
@@ -49,7 +50,8 @@ class Link extends EventEmitter {
     this.appDataDir = opts.appDataDir ?? null;
     this.place = opts.place ?? {};
     this.schemas = Schemas.load(opts.schemaDirs);
-    this.knownApps = (opts.knownApps ?? KNOWN_APPS).filter((a) => a.id !== this.self.id);
+    const mine = new Set([this.self.id, ...this.self.formerIds]);
+    this.knownApps = (opts.knownApps ?? KNOWN_APPS).filter((a) => !mine.has(a.id) && !(a.formerIds ?? []).some((i) => mine.has(i)));
     this.timing = { ...TIMING, pollMs: POLL_MS, backoffMs: BACKOFF_MS, ...opts.timing };
     this.strict = opts.strict ?? process.env.NODE_ENV === 'test';
     this.logFn = opts.log ?? (() => {});
@@ -138,9 +140,9 @@ class Link extends EventEmitter {
 
   /** Call after a Connected apps switch changes: closes connections switched off, looks for ones switched on. */
   refresh() {
-    for (const [id, c] of this.conns) if (!this.allowed(id)) c.bye(`Switched off in ${this.self.name}`);
-    for (const c of this.opening) if (c.peerId && !this.allowed(c.peerId)) c.close('Switched off');
-    for (const a of this.knownApps) if (this.allowed(a.id)) this.retry.delete(a.id);
+    for (const [, c] of this.conns) if (!this.allowedAny(c.peerIds)) c.bye(`Switched off in ${this.self.name}`);
+    for (const c of this.opening) if (c.peerIds.length && !this.allowedAny(c.peerIds)) c.close('Switched off');
+    for (const a of this.knownApps) if (this.allowedAny(this.idsOf(a.id))) this.retry.delete(a.id);
     this.poll();
     this.changed();
   }
@@ -153,6 +155,43 @@ class Link extends EventEmitter {
     }
   }
 
+  /** Whether the switch is on under any of an app's ids (it may still be saved under a former one). */
+  allowedAny(ids) {
+    return ids.some((id) => this.allowed(id));
+  }
+
+  /** A known app's id and its former ids; just the id for an app that isn't known. */
+  idsOf(id) {
+    const app = this.knownApps.find((a) => a.id === id || (a.formerIds ?? []).includes(id));
+    return app ? [app.id, ...(app.formerIds ?? [])] : [id];
+  }
+
+  /** The id this app knows another one by (its known-apps entry, matched on any id either side lists), and every id it has had. */
+  resolve(app) {
+    const theirs = [app.id, ...(app.formerIds ?? [])];
+    const known = this.knownApps.find((a) => [a.id, ...(a.formerIds ?? [])].some((i) => theirs.includes(i)));
+    const id = known?.id ?? app.id;
+    return { id, ids: [...new Set([...(known ? this.idsOf(known.id) : []), ...theirs])] };
+  }
+
+  /** The pairing key, under whichever of these ids it was filed. */
+  findKey(ids) {
+    for (const id of ids) {
+      const k = this.keys.get(id);
+      if (k) return k;
+    }
+    return null;
+  }
+
+  /**
+   * The id to use for an app: its current id, given any it has had. For moving an app's own
+   * settings across after the other app was renamed: settings[link.currentId(old)] = settings[old].
+   */
+  currentId(id) {
+    for (const c of this.conns.values()) if (c.peerIds.includes(id)) return c.peerId;
+    return this.idsOf(id)[0];
+  }
+
   // ------------------------------------------------------------------ finding apps
 
   pollSoon() {
@@ -162,14 +201,15 @@ class Link extends EventEmitter {
   }
 
   /**
-   * Connects to apps that are running and switched on. Of two apps, the one whose id sorts first
-   * connects and the other waits, so they don't both connect at once.
+   * Connects to apps that are running and switched on. Of two apps, the one whose slug sorts first
+   * connects and the other waits, so they don't both connect at once. (Slugs, not ids: an app's id
+   * may change, its socket's name doesn't.)
    */
   poll() {
     if (!this.running) return;
     const slugs = new Set(paths.listSlugs(this.place));
     for (const app of this.knownApps) {
-      if (!slugs.has(app.slug) || !this.allowed(app.id) || this.conns.has(app.id) || this.self.id > app.id) continue;
+      if (!slugs.has(app.slug) || !this.allowedAny(this.idsOf(app.id)) || this.conns.has(app.id) || this.self.slug > app.slug) continue;
       if ([...this.opening].some((c) => (c.expectedId ?? c.peerId) === app.id)) continue;
       const r = this.retry.get(app.id);
       if (r && Date.now() < r.at) continue;
@@ -191,7 +231,7 @@ class Link extends EventEmitter {
   track(conn) {
     this.opening.add(conn);
     conn.on('status', (s) => {
-      const id = conn.expectedId ?? s.peer?.id ?? conn.peerId;
+      const id = conn.expectedId ?? (s.peer ? this.resolve(s.peer).id : conn.peerId);
       if (!id) return;
       this.why.set(id, { ...s, peer: undefined, theirApp: s.peer });
       this.changed();
@@ -210,8 +250,8 @@ class Link extends EventEmitter {
     const id = conn.peerId;
     const other = this.conns.get(id);
     if (other) {
-      // Both connected at once: keep the one made by the app whose id sorts first.
-      const firstOf = (c) => (c.initiator ? this.self.id : c.peerId);
+      // Both connected at once: keep the one made by the app whose slug sorts first.
+      const firstOf = (c) => (c.initiator ? this.self.slug : c.peer.slug);
       const [keep, drop] = firstOf(conn) <= firstOf(other) ? [conn, other] : [other, conn];
       this.conns.set(id, keep);
       drop.bye('duplicate');
@@ -247,7 +287,10 @@ class Link extends EventEmitter {
       self: this.self,
       mine: this.mine,
       keys: this.keys,
-      allowed: (id) => this.allowed(id),
+      allowed: (ids) => this.allowedAny(ids),
+      idsOf: (id) => this.idsOf(id),
+      resolve: (app) => this.resolve(app),
+      findKey: (ids) => this.findKey(ids),
       schemas: this.schemas,
       timing: this.timing,
       log: (level, text) => this.log(level, text),
@@ -332,7 +375,7 @@ class Link extends EventEmitter {
 
   /** Asks a connected app something. Rejects with a GrapevineError (CLOSED if it isn't connected). */
   async request(appId, method, params = {}, opts) {
-    const conn = this.conns.get(appId);
+    const conn = this.conns.get(this.currentId(appId));
     if (!conn) throw new GrapevineError(CODES.CLOSED, `Not connected to ${appId}`);
     const cap = this.schemas.capabilityOf(method);
     const agreed = cap && conn.agreed.incoming.get(cap);
@@ -347,27 +390,29 @@ class Link extends EventEmitter {
 
   /** Disconnect on a card: tells the other app to forget the pairing, and forgets it here. Switch this app's own setting off too. */
   async disconnect(appId) {
-    const conn = this.conns.get(appId);
+    const id = this.currentId(appId);
+    const conn = this.conns.get(id);
     if (conn) {
       await conn.rpc.request('link.unpair', {}, { timeout: 2000 }).catch(() => {});
       conn.close('Disconnected');
     }
-    this.keys.delete(appId);
-    this.why.delete(appId);
+    for (const i of new Set([...this.idsOf(id), ...(conn?.peerIds ?? [])])) this.keys.delete(i);
+    this.why.delete(id);
     this.changed();
   }
 
   /** "Pair again" on a card: forgets this app's old key, so the next connection pairs afresh. */
   pairAgain(appId) {
-    this.keys.delete(appId);
-    this.why.delete(appId);
-    this.retry.delete(appId);
+    const id = this.currentId(appId);
+    for (const i of this.idsOf(id)) this.keys.delete(i);
+    this.why.delete(id);
+    this.retry.delete(id);
     this.poll();
     this.changed();
   }
 
   isConnected(appId) {
-    return this.conns.has(appId);
+    return this.conns.has(this.currentId(appId));
   }
 
   /**
@@ -378,8 +423,8 @@ class Link extends EventEmitter {
     return this.knownApps.map((app) => {
       const conn = this.conns.get(app.id);
       const why = this.why.get(app.id);
-      const enabled = this.allowed(app.id);
-      const paired = this.keys.get(app.id);
+      const enabled = this.allowedAny(this.idsOf(app.id));
+      const paired = this.findKey(this.idsOf(app.id));
       let status = !enabled ? 'off' : conn ? 'connected' : (why?.status ?? 'waiting');
       if (status === 'connected' && !conn) status = 'waiting';
       let report = null;
@@ -387,6 +432,7 @@ class Link extends EventEmitter {
       else if (status === 'incompatible' && why?.theirProtocol) report = incompatible(this.self, why.theirApp ?? app, hs.PROTOCOL, why.theirProtocol);
       return {
         id: app.id,
+        formerIds: app.formerIds ?? [],
         name: app.name,
         summary: app.summary,
         icon: app.icon,

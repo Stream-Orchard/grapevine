@@ -84,4 +84,9 @@ test('a hello is checked field by field', () => {
     );
   }
   assert.ok(hs.checkHello({}).includes('auth.nonce: 32 random bytes, base64'));
+  assert.deepEqual(hs.checkApp({ ...PD, formerIds: [] }), []);
+  assert.deepEqual(hs.checkApp({ ...PD, formerIds: ['com.example.old'] }), []);
+  for (const formerIds of ['com.example.old', [PD.id], ['Not An Id'], Array.from({ length: 11 }, (_, i) => `com.example.v${i}`)]) {
+    assert.deepEqual(hs.checkApp({ ...PD, formerIds }), ['app.formerIds: up to 10 ids it had before, not its own'], JSON.stringify(formerIds));
+  }
 });

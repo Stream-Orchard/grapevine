@@ -22,7 +22,11 @@ const TIMING = Object.freeze({
  * @property {object} self this app's description (the hello's "app")
  * @property {{provides: Record<string, string[]>, uses: Record<string, string[]>}} mine
  * @property {{get(id: string): {key: string, pairedAt?: string} | null, set(id: string, key: string): void, delete(id: string): void}} keys
- * @property {(id: string) => boolean} allowed whether this app's switch for that app is on
+ * @property {(ids: string[]) => boolean} allowed whether this app's switch for that app (under any of its ids) is on
+ * @property {(id: string) => string[]} idsOf a known app's id and former ids
+ * @property {(app: {id: string, slug: string, formerIds?: string[]}) => {id: string, ids: string[]}} resolve
+ *   the id this app knows another app by (its known-apps entry, matched by any id), and every id it has had
+ * @property {(ids: string[]) => {key: string, pairedAt?: string} | null} findKey the pairing key, filed under any of those ids
  * @property {import('./schema').Schemas} schemas
  * @property {(conn: Connection, method: string, params: any) => Promise<any>} call runs a capability method
  * @property {(conn: Connection, events: string[]) => string[]} subscribe
@@ -45,7 +49,9 @@ class Connection extends EventEmitter {
     this.expectedId = expectedId ?? null;
     this.state = 'hello'; // hello -> auth -> ready -> closed (the connecting app: hello -> authing -> ready)
     this.peer = null; // the other app's description, from its hello
-    this.peerId = null;
+    this.peerId = null; // the id this app knows the other one by
+    /** @type {string[]} */
+    this.peerIds = []; // and every id it has had
     this.agreed = { incoming: new Map(), outgoing: new Map(), missing: [] };
     this.protocol = null;
     this.subscribed = new Set(); // events the other app subscribed to
@@ -85,7 +91,9 @@ class Connection extends EventEmitter {
   /** Says hello, checks the reply's proof, proves itself, and is ready. */
   async start() {
     const { self, mine, keys } = this.host;
-    const stored = keys.get(this.expectedId);
+    // The key may be filed under a former id of that app: one it had before a rename.
+    const expectedIds = this.host.idsOf(this.expectedId);
+    const stored = this.host.findKey(expectedIds);
     const clientNonce = hs.nonce();
     let res;
     try {
@@ -99,7 +107,8 @@ class Connection extends EventEmitter {
     }
     const problems = hs.checkApp(res?.app);
     if (problems.length) return this.close(`Its hello reply isn't valid: ${problems.join('; ')}`);
-    if (this.expectedId && res.app.id !== this.expectedId) return this.close(`Expected ${this.expectedId}, but ${res.app.id} answered`);
+    const theirIds = [res.app.id, ...(res.app.formerIds ?? [])];
+    if (!theirIds.some((i) => expectedIds.includes(i))) return this.close(`Expected ${this.expectedId}, but ${res.app.id} answered`);
     if (hs.agreeProtocol(hs.PROTOCOL, { min: res.protocol, max: res.protocol }) === null)
       return this.close(`It chose protocol ${res.protocol}, which this app doesn't speak`);
     const key = stored?.key ?? res.auth?.key;
@@ -109,7 +118,8 @@ class Connection extends EventEmitter {
       return this.close("Its proof was wrong: the pairing doesn't match");
     }
     this.peer = res.app;
-    this.peerId = res.app.id;
+    this.peerId = this.expectedId; // the id this app knows it by, whatever it calls itself now
+    this.peerIds = [...new Set([...expectedIds, ...theirIds])];
     this.protocol = res.protocol;
     this.agreed = hs.agree(mine, res.capabilities);
     this.state = 'authing';
@@ -141,10 +151,10 @@ class Connection extends EventEmitter {
       this.emit('status', { status: 'incompatible', peer: params.app, theirProtocol: params.protocol });
       return this.reject(id, new GrapevineError(CODES.UNSUPPORTED, 'No protocol version in common', { protocol: hs.PROTOCOL }));
     }
-    const peerId = params.app.id;
-    if (!this.host.allowed(peerId))
+    const { id: peerId, ids } = this.host.resolve(params.app);
+    if (!this.host.allowed(ids))
       return this.reject(id, new GrapevineError(CODES.SWITCHED_OFF, `${this.host.self.name} isn't set to connect with ${params.app.name}`));
-    const stored = this.host.keys.get(peerId);
+    const stored = this.host.findKey(ids);
     let key;
     if (params.auth.pair) {
       // An app asking to pair while this one still has a key: only once you press Pair again here.
@@ -164,6 +174,7 @@ class Connection extends EventEmitter {
     this.pending = { key, serverNonce, pairing: !!params.auth.pair };
     this.peer = params.app;
     this.peerId = peerId;
+    this.peerIds = ids;
     this.protocol = protocol;
     this.agreed = hs.agree(this.host.mine, params.capabilities);
     this.state = 'auth';
@@ -265,7 +276,7 @@ class Connection extends EventEmitter {
       return this.host.afterSubscribe?.(this);
     }
     if (method === 'link.unpair') {
-      this.host.keys.delete(this.peerId);
+      for (const i of this.peerIds) this.host.keys.delete(i);
       this.rpc.reply(id, {});
       this.emit('unpaired');
       return this.close('Disconnected in the other app');

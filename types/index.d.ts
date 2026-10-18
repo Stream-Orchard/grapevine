@@ -13,6 +13,8 @@ export type EventData<E extends EventName> = Omit<Events[E], 'seq' | 'at'>;
 export interface AppInfo {
   /** The app's install id, like com.example.app */
   id: string;
+  /** Ids it had before a rename (up to 10), so apps paired with it then still know it. Sent as [] until then. */
+  formerIds?: string[];
   /** Its socket name: a-z, 0-9 and dashes */
   slug: string;
   name: string;
@@ -51,6 +53,8 @@ export interface Timing {
 
 export interface KnownApp {
   id: string;
+  /** Ids it had before a rename */
+  formerIds: string[];
   slug: string;
   name: string;
   summary: string;
@@ -94,7 +98,9 @@ export interface Report {
 }
 
 export interface Peer {
+  /** The id this app knows it by */
   id: string;
+  formerIds: string[];
   name: string;
   summary: string;
   /** Path of its bundled logo */
@@ -145,6 +151,8 @@ export declare class Link extends EventEmitter {
   /** Pair again on a card: forgets this app's old key. */
   pairAgain(appId: string): void;
   isConnected(appId: string): boolean;
+  /** Its current id, given any id it has had: for moving your own settings across after another app is renamed. */
+  currentId(appId: string): string;
   /** Every known app, for the Connected apps page. */
   peers(): Peer[];
 

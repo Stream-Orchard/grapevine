@@ -11,6 +11,7 @@ const ICONS = path.join(__dirname, '..', 'assets', 'apps');
 /**
  * @typedef {object} KnownApp
  * @property {string} id the app's install id (the hello's app.id)
+ * @property {string[]} formerIds ids it had before a rename: an app paired under one of them is still known
  * @property {string} slug its socket name
  * @property {string} name
  * @property {string} summary one sentence, for its card
@@ -25,6 +26,7 @@ const ICONS = path.join(__dirname, '..', 'assets', 'apps');
 const KNOWN_APPS = [
   {
     id: 'com.streamorchard.peardrops',
+    formerIds: [],
     slug: 'pear-drops',
     name: 'Pear Drops',
     summary: "Collects your Kick emote and badge drops for you, watching with Kick's own player.",
@@ -36,6 +38,7 @@ const KNOWN_APPS = [
   },
   {
     id: 'com.glowingpear.streammultiview',
+    formerIds: [],
     slug: 'stream-multiview',
     name: 'Stream Multiview',
     summary: 'Watch Kick, Twitch and YouTube streams and chats side by side, with custom layouts, live alerts and color themes.',
