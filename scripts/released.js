@@ -2,7 +2,7 @@
 // at the version in schemas/ now, and the protocol. After that, test/released.test.js stops those
 // versions changing in place, and the known-apps list can say "update <app> to <version>".
 //   npm run released -- com.streamorchard.peardrops 0.1.6 drops.farming@1.0 players@1.0
-// (the versions are what the release declared; `npx grapevine-check` in the app's repo prints the line)
+// (the versions are what the release declared; `npm run grapevine:check` in the app's repo prints the line)
 'use strict';
 
 const fs = require('fs');

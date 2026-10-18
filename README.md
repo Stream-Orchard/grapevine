@@ -197,11 +197,19 @@ When it ships a release that uses Grapevine, record it (next section).
 
 Once an app ships a capability version, Grapevine records it. From then on that version can't change in place, and other apps can say which release to update to.
 
-In the app's repo, at the start of every change:
+Give the app a script for it, in its `package.json`:
+
+```json
+"scripts": { "grapevine:check": "grapevine-check" }
+```
+
+Then, in the app's repo, at the start of every change:
 
 ```sh
-npx grapevine-check
+npm run grapevine:check
 ```
+
+Use the script, not `npx grapevine-check`: in a checkout where Grapevine isn't installed yet, `npx` would fetch and run whatever package on npm has that name. `npm run` only uses what's installed.
 
 - **It reads** the `grapevine` field from each of the app's release tags (`v*`), and Grapevine's record from GitHub (the installed copy if it's offline, or with `--offline`).
 - **It lists** any capability version a release shipped that isn't recorded yet, with the command to record it, e.g. `npm run released -- com.streamorchard.peardrops 0.1.6 drops.farming@1.0 players@1.0`.
