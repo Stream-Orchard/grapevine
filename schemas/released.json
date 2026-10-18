@@ -1,5 +1,20 @@
 {
   "description": "Capability versions that have shipped in an app's release, and which release of each app first had them. Written by `npm run released -- <app id> <version>`; never by hand. A version recorded here can't change in place: test/released.test.js fails until the change goes in a new minor.",
-  "schemas": {},
-  "firstRelease": {}
+  "schemas": {
+    "drops.farming@1": {
+      "minor": 0,
+      "sha256": "684bae44657cb4f6dd222df5a28057b9d4d32e805f479fc78d14a1e8b09479c6"
+    },
+    "players@1": {
+      "minor": 0,
+      "sha256": "a442285b080e2f20ac0ea8224e9f326e525c0e7277ff0015c7948d111ff5d5f6"
+    }
+  },
+  "firstRelease": {
+    "com.streamorchard.peardrops": {
+      "drops.farming@1.0": "0.1.6",
+      "players@1.0": "0.1.6",
+      "protocol@1": "0.1.6"
+    }
+  }
 }
