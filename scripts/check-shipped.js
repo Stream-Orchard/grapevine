@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Run in an app's repo (npx grapevine-check): lists the capability versions the app's releases
+// Run in an app's repo, through a script ("grapevine:check": "grapevine-check"; never npx, which
+// would fetch a package of that name when Grapevine isn't installed): lists the capability versions the app's releases
 // have shipped that Grapevine hasn't recorded yet, with the command that records them (Grapevine's
 // app-shipped skill). Until they're recorded, those versions can still be changed in place, and
 // other apps can't say which release to update to.
@@ -7,9 +8,9 @@
 // The app says what it speaks in its package.json, so every release tag has it:
 //   "grapevine": { "app": "com.streamorchard.peardrops", "provides": { "drops.farming": "1.0" }, "uses": { "players": "1.0" } }
 //
-//   npx grapevine-check            prints what needs recording (exit 0)
-//   npx grapevine-check --strict   exits 1 when something does
-//   npx grapevine-check --offline  uses the record in the installed package, not GitHub's
+//   npm run grapevine:check                prints what needs recording (exit 0)
+//   npm run grapevine:check -- --strict    exits 1 when something does
+//   npm run grapevine:check -- --offline   uses the record in the installed package, not GitHub's
 'use strict';
 
 const fs = require('fs');

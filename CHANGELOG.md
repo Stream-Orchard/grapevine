@@ -1,6 +1,9 @@
 # What's new in Grapevine
 
-## 0.7.0 (current)
+## 0.7.1 (current)
+- The docs run the check as an app's npm script (`npm run grapevine:check`), never `npx grapevine-check`, which would fetch a package of that name from npm when Grapevine isn't installed.
+
+## 0.7.0
 - `link.test(appId)`, for a Test button on a Connected apps card. Connected, a round trip and how long it took; otherwise it tries straight away, from either side, and says in words why it couldn't (not open, switched off there or here, the pairing doesn't match, which app to update, no answer).
 
 ## 0.6.0
