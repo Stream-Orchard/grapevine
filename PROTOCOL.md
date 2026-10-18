@@ -181,7 +181,8 @@ A capability is a named feature one app provides and others use, defined by a JS
 | ----------- | ----------------------------------------------------------------- |
 | `Timestamp` | ISO 8601, in UTC                                                  |
 | `Platform`  | A streaming site: `kick`, `twitch`, `youtube`, or one added later |
-| `Channel`   | `{ platform, slug, name? }`                                       |
+| `Channel`   | `{ platform, slug, name?, avatar? }`                              |
+| `Image`     | A picture's `https` address, as the site gives it                 |
 | `Account`   | `{ platform, user }`: the username only, never a token or cookie  |
 | `Progress`  | `{ done, total, unit }`, where `unit` is `minutes` for now        |
 
@@ -194,14 +195,22 @@ A capability is a named feature one app provides and others use, defined by a JS
 
 ### `drops.farming` 1.0
 
-What a drops app is farming. Provided by Pear Drops.
+What a drops app is farming, with enough for another app to show it, in a top-bar widget say. Provided by Pear Drops.
 
-| Field     |                                                                                                                            |
-| --------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `state`   | `farming` (its player is watching a stream for drop credit), `waiting`, `paused`, `done`, `signed-out`, or one added later |
-| `account` | The account it farms for, or `null`                                                                                        |
-| `channel` | The stream it's watching while `farming`, else `null`                                                                      |
-| `drop`    | `{ campaign, category, progress }` while farming, else `null`                                                              |
+| Field          |                                                                                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `state`        | `farming` (its player is watching a stream for drop credit), `waiting`, `paused`, `done`, `signed-out`, or one added later                                         |
+| `account`      | The account it farms for, or `null`                                                                                                                                |
+| `channel`      | The channel it's watching while `farming` (with its `avatar`, optional), else `null`                                                                               |
+| `stream`       | Optional, while farming: `{ title?, viewers? }`                                                                                                                    |
+| `drop`         | While farming, `{ campaign, category, progress }`, else `null`. Optional extras below                                                                              |
+| `drop.image`   | The category's picture                                                                                                                                             |
+| `drop.endsAt`  | When the drop ends                                                                                                                                                 |
+| `drop.rewards` | `{ claimed, total }`                                                                                                                                               |
+| `drop.next`    | The reward being worked towards: `{ name, image?, required, unlocksAt }`, where `required` is minutes and `unlocksAt` is when it should unlock at the current rate |
+| `drop.doneAt`  | When every reward should be earned at the current rate, or `null`                                                                                                  |
+
+`drops.farming.show {}` asks the drops app to bring its window to the front, for a click on that widget. It replies `{ shown }`.
 
 ### `players` 1.0
 

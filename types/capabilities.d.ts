@@ -3,6 +3,9 @@
 /** ISO 8601, in UTC */
 export type Timestamp = string;
 
+/** A picture's https address, as the site gives it */
+export type Image = string;
+
 /** A streaming site */
 export type Platform = "kick" | "twitch" | "youtube" | (string & {});
 
@@ -12,6 +15,8 @@ export type Channel = {
   slug: string;
   /** As shown on the site */
   name?: string;
+  /** The channel's picture */
+  avatar?: Image;
 };
 
 /** Who an app is signed in as: the username only, never a token or cookie */
@@ -28,7 +33,7 @@ export type Progress = {
 
 export type Empty = Record<string, unknown>;
 
-// drops.farming 1.0: What a drops app is farming. Provided by Pear Drops.
+// drops.farming 1.0: What a drops app is farming, with enough to show it (a top-bar widget, say). Provided by Pear Drops.
 export type DropsFarmingV1State = {
   /** Counts up with each change; 0 for a reply to drops.farming.get */
   seq: number;
@@ -42,6 +47,30 @@ export type DropsFarmingV1State = {
     campaign: string;
     category: string;
     progress: Progress;
+    /** The category's picture */
+    image?: Image;
+    /** When the drop ends */
+    endsAt?: Timestamp;
+    /** When every reward should be earned, at the current rate */
+    doneAt?: Timestamp | null;
+    rewards?: {
+      claimed: number;
+      total: number;
+    };
+    /** The reward being worked towards */
+    next?: {
+      name: string;
+      image?: Image;
+      /** Minutes of watching it unlocks at */
+      required: number;
+      /** When it should unlock, at the current rate */
+      unlocksAt?: Timestamp | null;
+    } | null;
+  } | null;
+  /** The stream being watched, while farming: its title and viewers */
+  stream?: {
+    title?: string;
+    viewers?: number;
   } | null;
 };
 
@@ -73,5 +102,9 @@ export interface Events {
 /** Every method, by name: its params and result. */
 export interface Methods {
   "drops.farming.get": { params: Empty; result: DropsFarmingV1State };
+  "drops.farming.show": { params: Empty; result: {
+      /** Whether its window came to the front */
+      shown: boolean;
+    } };
   "players.get": { params: Empty; result: PlayersV1State };
 }

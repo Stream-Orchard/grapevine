@@ -2,20 +2,50 @@
   "capability": "drops.farming",
   "major": 1,
   "minor": 0,
-  "description": "What a drops app is farming. Provided by Pear Drops.",
+  "description": "What a drops app is farming, with enough to show it (a top-bar widget, say). Provided by Pear Drops.",
   "events": {
-    "drops.farming.changed": { "$ref": "#State" }
+    "drops.farming.changed": {
+      "$ref": "#State"
+    }
   },
   "methods": {
-    "drops.farming.get": { "params": { "$ref": "common:Empty" }, "result": { "$ref": "#State" } }
+    "drops.farming.get": {
+      "params": {
+        "$ref": "common:Empty"
+      },
+      "result": {
+        "$ref": "#State"
+      }
+    },
+    "drops.farming.show": {
+      "params": {
+        "$ref": "common:Empty"
+      },
+      "result": {
+        "type": "object",
+        "required": ["shown"],
+        "properties": {
+          "shown": {
+            "type": "boolean",
+            "description": "Whether its window came to the front"
+          }
+        }
+      }
+    }
   },
   "defs": {
     "State": {
       "type": "object",
       "required": ["seq", "at", "state", "account", "channel", "drop"],
       "properties": {
-        "seq": { "type": "integer", "minimum": 0, "description": "Counts up with each change; 0 for a reply to drops.farming.get" },
-        "at": { "$ref": "common:Timestamp" },
+        "seq": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Counts up with each change; 0 for a reply to drops.farming.get"
+        },
+        "at": {
+          "$ref": "common:Timestamp"
+        },
         "state": {
           "type": "string",
           "minLength": 1,
@@ -23,21 +53,141 @@
           "x-open": ["farming", "waiting", "paused", "done", "signed-out"],
           "description": "farming: its player is watching a stream for drop credit. Any other value, known or not, means it isn't."
         },
-        "account": { "anyOf": [{ "$ref": "common:Account" }, { "type": "null" }] },
-        "channel": { "anyOf": [{ "$ref": "common:Channel" }, { "type": "null" }], "description": "The stream being watched, while farming" },
+        "account": {
+          "anyOf": [
+            {
+              "$ref": "common:Account"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "channel": {
+          "anyOf": [
+            {
+              "$ref": "common:Channel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The stream being watched, while farming"
+        },
         "drop": {
           "anyOf": [
             {
               "type": "object",
               "required": ["campaign", "category", "progress"],
               "properties": {
-                "campaign": { "type": "string", "maxLength": 200 },
-                "category": { "type": "string", "maxLength": 200 },
-                "progress": { "$ref": "common:Progress" }
+                "campaign": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "category": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "progress": {
+                  "$ref": "common:Progress"
+                },
+                "image": {
+                  "$ref": "common:Image",
+                  "description": "The category's picture"
+                },
+                "endsAt": {
+                  "$ref": "common:Timestamp",
+                  "description": "When the drop ends"
+                },
+                "doneAt": {
+                  "anyOf": [
+                    {
+                      "$ref": "common:Timestamp"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "When every reward should be earned, at the current rate"
+                },
+                "rewards": {
+                  "type": "object",
+                  "required": ["claimed", "total"],
+                  "properties": {
+                    "claimed": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                },
+                "next": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "required": ["name", "required"],
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "image": {
+                          "$ref": "common:Image"
+                        },
+                        "required": {
+                          "type": "number",
+                          "minimum": 0,
+                          "description": "Minutes of watching it unlocks at"
+                        },
+                        "unlocksAt": {
+                          "anyOf": [
+                            {
+                              "$ref": "common:Timestamp"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "When it should unlock, at the current rate"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "The reward being worked towards"
+                }
               }
             },
-            { "type": "null" }
+            {
+              "type": "null"
+            }
           ]
+        },
+        "stream": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                "viewers": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The stream being watched, while farming: its title and viewers"
         }
       }
     }
