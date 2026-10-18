@@ -32,7 +32,7 @@ Every app has a **slug** (`a-z`, `0-9` and `-`, up to 40 characters, starting wi
 - A socket left by a crash answers nothing (`ECONNREFUSED`): its app deletes it and listens again when it starts. If something does answer, another copy of the app is running, and the new copy doesn't start its link.
 - An app only listens, and only looks for others, while at least one of its Connected apps switches is on.
 
-**Who connects.** Of two apps, the one whose slug sorts first (plain string order) connects; the other waits for it. So a pair never opens two connections. If they ever do, both keep the connection opened by the app whose slug sorts first and close the other with `link.bye { reason: "duplicate" }`. It's the slug, not the id, because an app's id can change (see [Renaming an app](#renaming-an-app)) and its socket's name doesn't.
+**Who connects.** Of two apps, the one whose slug sorts first (plain string order) connects; the other waits for it, so a pair normally opens one connection. An app may still connect the other way to check the link on its user's request (a Test button). If they ever do have two, both keep the connection opened by the app whose slug sorts first and close the other with `link.bye { reason: "duplicate" }`. It's the slug, not the id, because an app's id can change (see [Renaming an app](#renaming-an-app)) and its socket's name doesn't.
 
 ## Messages
 

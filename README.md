@@ -131,8 +131,15 @@ Editors suggest every event's fields and underline mistakes, in plain JavaScript
 | `formerIds`                           | Ids the app had before a rename                                                                              |
 | `shares`                              | What the two apps share: `{ out, in }`, capabilities this app provides that it uses, and the other way round |
 
-Two calls go with buttons on the card:
+Three calls go with buttons on the card:
 
+- **Test:** `await link.test(appId)`. Connected, it's a round trip, `{ ok: true, ms, version, text }`, with `text` like "Stream Multiview 0.4.0 answered in 3 ms". Otherwise it tries straight away, from this side too, and says why it couldn't: `{ ok: false, reason, text }`. `reason` is one of:
+  - `not-running`: "Stream Multiview isn't open"
+  - `switched-off`: its Connect switch is off
+  - `off`: this app's is
+  - `pair-again`: with where to press it
+  - `incompatible`: which app to update
+  - `no-answer`, `not-started`, `unknown`
 - **Disconnect:** `link.disconnect(appId)`. Turn your own switch for that app off too.
 - **Pair again:** `link.pairAgain(appId)`.
 
