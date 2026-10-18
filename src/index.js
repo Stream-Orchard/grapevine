@@ -418,6 +418,59 @@ class Link extends EventEmitter {
     this.changed();
   }
 
+  /**
+   * Test on a card: checks the link to that app now, and says how it went in words. Connected, a
+   * round trip and back; otherwise it tries straight away (from this side too, whichever app
+   * normally connects) and says why it couldn't.
+   * @returns {Promise<{ok: true, ms: number, version: string, text: string} | {ok: false, reason: string, text: string}>}
+   *   reason: 'unknown' | 'off' | 'not-started' | 'not-running' | 'switched-off' | 'pair-again' | 'incompatible' | 'no-answer'
+   */
+  async test(appId, { timeout = 4000 } = {}) {
+    const id = this.currentId(appId);
+    const app = this.knownApps.find((a) => a.id === id);
+    if (!app) return { ok: false, reason: 'unknown', text: `${appId} isn't an app Grapevine knows` };
+    if (!this.allowedAny(this.idsOf(id))) return { ok: false, reason: 'off', text: `Switched off here: switch on Connect with ${app.name} first` };
+    if (!this.running) return { ok: false, reason: 'not-started', text: `${this.self.name} isn't listening for other apps yet` };
+    if (!this.conns.has(id)) {
+      if (!paths.listSlugs(this.place).includes(app.slug)) return { ok: false, reason: 'not-running', text: `${app.name} isn't open` };
+      this.retry.delete(id);
+      this.why.delete(id);
+      const trying = () => [...this.opening].some((c) => (c.expectedId ?? c.peerId) === id);
+      if (!trying()) this.connect(app);
+      await new Promise((resolve) => {
+        const done = () => {
+          clearTimeout(timer);
+          this.off('change', check);
+          resolve();
+        };
+        const check = () => (this.conns.has(id) || this.why.has(id) || !trying()) && done();
+        const timer = setTimeout(done, timeout);
+        this.on('change', check);
+        check();
+      });
+    }
+    const conn = this.conns.get(id);
+    if (!conn) {
+      const why = this.why.get(id);
+      if (why?.status === 'pair-again') {
+        return { ok: false, reason: 'pair-again', text: `The pairing doesn't match: press Pair again ${why.keyHeldBy === 'them' ? `in ${app.name}` : 'here'}` };
+      }
+      if (why?.status === 'incompatible') {
+        return { ok: false, reason: 'incompatible', text: incompatible(this.self, why.theirApp ?? app, hs.PROTOCOL, why.theirProtocol ?? hs.PROTOCOL).text };
+      }
+      if (why?.reason === 'switched-off') return { ok: false, reason: 'switched-off', text: `${app.name} is open, but its Connect switch is off` };
+      return { ok: false, reason: 'no-answer', text: `${app.name} is open, but didn't answer` };
+    }
+    const started = performance.now();
+    try {
+      await conn.rpc.request('link.ping', {}, { timeout });
+    } catch {
+      return { ok: false, reason: 'no-answer', text: `${app.name} didn't answer` };
+    }
+    const ms = Math.max(1, Math.round(performance.now() - started));
+    return { ok: true, ms, version: conn.peer.version, text: `${app.name} ${conn.peer.version} answered in ${ms} ms` };
+  }
+
   isConnected(appId) {
     return this.conns.has(this.currentId(appId));
   }

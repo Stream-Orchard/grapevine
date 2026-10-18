@@ -128,6 +128,15 @@ export interface Peer {
   keysEncrypted: boolean;
 }
 
+export type TestResult =
+  | { ok: true; ms: number; version: string; text: string }
+  | {
+      ok: false;
+      reason: 'unknown' | 'off' | 'not-started' | 'not-running' | 'switched-off' | 'pair-again' | 'incompatible' | 'no-answer';
+      /** In words, for the card: "Stream Multiview isn't open" */
+      text: string;
+    };
+
 export interface CallContext {
   appId: string;
   app: AppInfo;
@@ -156,6 +165,8 @@ export declare class Link extends EventEmitter {
   /** Pair again on a card: forgets this app's old key. */
   pairAgain(appId: string): void;
   isConnected(appId: string): boolean;
+  /** Test on a card: checks the link now, and says how it went. Tries straight away when not connected. */
+  test(appId: string, opts?: { timeout?: number }): Promise<TestResult>;
   /** Its current id, given any id it has had: for moving your own settings across after another app is renamed. */
   currentId(appId: string): string;
   /** Every known app, for the Connected apps page. */

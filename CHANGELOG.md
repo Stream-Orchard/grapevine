@@ -1,6 +1,9 @@
 # What's new in Grapevine
 
-## 0.6.0 (current)
+## 0.7.0 (current)
+- `link.test(appId)`, for a Test button on a Connected apps card. Connected, a round trip and how long it took; otherwise it tries straight away, from either side, and says in words why it couldn't (not open, switched off there or here, the pairing doesn't match, which app to update, no answer).
+
+## 0.6.0
 - `npx grapevine-check`, run in an app's repo, lists the capability versions its releases have shipped that Grapevine hasn't recorded yet, with the command that records them. Apps declare what they speak in their `package.json`'s `grapevine` field.
 - `npm run released` takes the versions a release declared, so it records what that release shipped.
 

@@ -604,3 +604,112 @@ test(
     assert.equal(pd.running, true);
   }),
 );
+
+test(
+  'Test on a card: a round trip when connected, and in words why not otherwise',
+  withPlace(async ({ place }, track) => {
+    let mvAllows = true;
+    let pdAllows = true;
+    const { pd, mv } = pair(place, { pd: { allowed: () => pdAllows }, mv: { allowed: () => mvAllows } });
+    track(pd, mv);
+    assert.deepEqual(await pd.test('com.nobody'), { ok: false, reason: 'unknown', text: "com.nobody isn't an app Grapevine knows" });
+    assert.equal((await pd.test(MV.id)).reason, 'not-started');
+    await pd.start();
+    assert.deepEqual(await pd.test(MV.id), { ok: false, reason: 'not-running', text: "Stream Multiview isn't open" });
+
+    // Stream Multiview tests first: it connects itself, though Pear Drops normally does.
+    mvAllows = true;
+    await mv.start();
+    const fromMv = await mv.test(PD.id);
+    assert.equal(fromMv.ok, true, JSON.stringify(fromMv));
+    assert.ok(fromMv.ms >= 1);
+    assert.equal(fromMv.version, '0.1.5');
+    assert.match(fromMv.text, /^Pear Drops 0\.1\.5 answered in \d+ ms$/);
+    await until(() => pd.conns.size === 1 && mv.conns.size === 1, 'one connection each, whoever connected');
+    const fromPd = await pd.test(MV.id);
+    assert.equal(fromPd.ok, true);
+    assert.match(fromPd.text, /^Stream Multiview 0\.4\.0 answered in \d+ ms$/);
+
+    // Its switch off: Pear Drops can't link, and says why.
+    mvAllows = false;
+    mv.refresh();
+    await until(() => !pd.isConnected(MV.id), 'unlinked');
+    assert.deepEqual(await pd.test(MV.id), { ok: false, reason: 'switched-off', text: 'Stream Multiview is open, but its Connect switch is off' });
+    // This side's switch off.
+    pdAllows = false;
+    assert.equal((await pd.test(MV.id)).reason, 'off');
+    pdAllows = true;
+    mvAllows = true;
+
+    // The pairing doesn't match: Pear Drops kept a key Stream Multiview lost.
+    mv.keys.delete(PD.id);
+    pd.keys.set(MV.id, hs.newKey());
+    const bad = await pd.test(MV.id);
+    assert.equal(bad.reason, 'pair-again');
+    assert.equal(bad.text, "The pairing doesn't match: press Pair again here");
+    const other = await mv.test(PD.id);
+    assert.equal(other.reason, 'pair-again');
+    assert.equal(other.text, "The pairing doesn't match: press Pair again in Pear Drops");
+  }),
+);
+
+test(
+  'Test: an app that connects but never answers, or one too old to link with',
+  withPlace(async ({ place }, track) => {
+    let behave = 'hung';
+    const sockets = new Set();
+    const server = net.createServer((socket) => {
+      sockets.add(socket);
+      socket.on('close', () => sockets.delete(socket));
+      socket.on('error', () => {});
+      if (behave === 'silent') return; // takes the connection, says nothing
+      const reader = new LineReader(
+        (m) => {
+          const send = (o) => socket.write(encode(o));
+          if (m.method === 'link.hello' && behave === 'future')
+            return send({ jsonrpc: '2.0', id: m.id, error: { code: CODES.UNSUPPORTED, message: 'no', data: { protocol: { min: 5, max: 5 } } } });
+          if (m.method === 'link.hello') {
+            const key = hs.newKey();
+            return send({
+              jsonrpc: '2.0',
+              id: m.id,
+              result: {
+                protocol: 1,
+                app: MV,
+                capabilities: { players: { provides: ['1.0'] } },
+                auth: { proof: hs.proof(key, 'server', m.params.auth.nonce), nonce: hs.nonce(), key },
+              },
+            });
+          }
+          if (m.method === 'link.auth') return send({ jsonrpc: '2.0', id: m.id, result: {} });
+          // link.ping: no answer
+        },
+        () => {},
+      );
+      socket.on('data', (d) => reader.push(d));
+    });
+    paths.ensureDir(place);
+    await new Promise((r) => server.listen(paths.socketPath(MV.slug, place), r));
+    const { pd } = pair(place, { pd: { timing: { ...FAST, pingMs: 60_000 } } }); // no pings of its own in the way
+    track(pd);
+    try {
+      await pd.start();
+      await until(() => pd.isConnected(MV.id), 'connected');
+      assert.deepEqual(await pd.test(MV.id, { timeout: 200 }), { ok: false, reason: 'no-answer', text: "Stream Multiview didn't answer" });
+      for (const sk of sockets) sk.destroy();
+      await until(() => !pd.isConnected(MV.id), 'dropped');
+      behave = 'future';
+      const old = await pd.test(MV.id, { timeout: 1000 });
+      assert.equal(old.reason, 'incompatible');
+      assert.equal(old.text, "Can't connect: update Pear Drops");
+      behave = 'silent';
+      const quiet = await pd.test(MV.id, { timeout: 300 });
+      assert.equal(quiet.reason, 'no-answer');
+      assert.equal(quiet.text, "Stream Multiview is open, but didn't answer");
+    } finally {
+      await pd.stop();
+      for (const sk of sockets) sk.destroy();
+      await new Promise((r) => server.close(r));
+    }
+  }),
+);
