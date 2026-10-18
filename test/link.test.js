@@ -852,6 +852,71 @@ test(
 );
 
 test(
+  'confirmPairing, on the listening app: a first pairing waits for Allow there, and the other app says where to press it',
+  withPlace(async ({ place }, track) => {
+    const mvKeys = memoryKeyStore(),
+      pdKeys = memoryKeyStore();
+    const { pd, mv } = pair(place, { mv: { confirmPairing: true, keys: mvKeys }, pd: { keys: pdKeys } });
+    track(pd, mv);
+    await mv.start();
+    await pd.start();
+    await until(() => mv.peers()[0].status === 'confirm', 'Stream Multiview asked');
+    assert.deepEqual(mv.peers()[0].asking, { name: PD.name, version: PD.version });
+    assert.equal(mv.peers()[0].reason, null);
+    await until(() => pd.peers()[0].reason === 'confirm-there', 'Pear Drops told');
+    assert.deepEqual(await pd.test(MV.id, { timeout: 300 }), { ok: false, reason: 'confirm-there', text: 'Allow the pairing in Stream Multiview' });
+    assert.equal((await mv.test(PD.id, { timeout: 300 })).reason, 'confirm');
+    assert.equal(mvKeys.get(PD.id), null, 'no key kept');
+    assert.equal(pdKeys.get(MV.id), null);
+    mv.allowPairing(PD.id);
+    await until(() => mv.isConnected(PD.id), 'paired once allowed');
+    assert.ok(mvKeys.get(PD.id) && pdKeys.get(MV.id));
+    assert.equal(mv.mayPairUntil.size, 0, 'the Allow is used up');
+    // already paired: no Allow needed to connect again
+    await pd.stop();
+    await until(() => !mv.isConnected(PD.id), 'gone');
+    const again = pair(place, { pd: { keys: pdKeys } }).pd;
+    track(again);
+    await again.start();
+    await until(() => mv.isConnected(PD.id), 'back without asking');
+  }),
+);
+
+test(
+  'confirmPairing, on the connecting app: it says hello, waits for Allow there, and neither app keeps a key until then; Pair again allows',
+  withPlace(async ({ place }, track) => {
+    const mvKeys = memoryKeyStore(),
+      pdKeys = memoryKeyStore();
+    const { pd, mv } = pair(place, { pd: { confirmPairing: true, keys: pdKeys }, mv: { keys: mvKeys } });
+    track(pd, mv);
+    await mv.start();
+    await pd.start();
+    await until(() => pd.peers()[0].status === 'confirm', 'Pear Drops asked');
+    assert.deepEqual(pd.peers()[0].asking, { name: MV.name, version: MV.version });
+    assert.equal(mvKeys.get(PD.id), null, 'the other app kept nothing either');
+    // it stops asking: after a while it's just waiting again
+    pd.why.get(MV.id).at = Date.now() - 80_000;
+    assert.equal(pd.peers()[0].status, 'waiting');
+    assert.equal(pd.peers()[0].asking, null);
+    pd.pairAgain(MV.id);
+    await until(() => pd.isConnected(MV.id), 'paired after Pair again');
+    assert.ok(mvKeys.get(PD.id) && pdKeys.get(MV.id));
+  }),
+);
+
+test('allowPairing without confirmPairing only tries again', async () => {
+  const t = tmpPlace();
+  try {
+    const { pd } = pair(t.place);
+    pd.allowPairing(MV.id);
+    assert.equal(pd.mayPairUntil.size, 0);
+    assert.equal(pd.peers()[0].status, 'waiting');
+  } finally {
+    t.cleanup();
+  }
+});
+
+test(
   'Windows: an app also answers on the pipe name an older Grapevine uses, so an older copy of the other app finds it',
   { skip: process.platform !== 'win32' && 'named pipes' },
   withPlace(async ({ place }, track) => {

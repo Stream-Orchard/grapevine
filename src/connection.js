@@ -55,6 +55,8 @@ const QUEUE_MAX = 100;
  * @property {(app: {id: string, slug: string, formerIds?: string[]}) => {id: string, ids: string[]}} resolve
  *   the id this app knows another app by (its known-apps entry, matched by any id), and every id it has had
  * @property {(ids: string[]) => {key: string, pairedAt?: string} | null} findKey the pairing key, filed under any of those ids
+ * @property {(ids: string[]) => boolean} [mayPair] whether a new pairing with that app may be kept now (confirmPairing)
+ * @property {(id: string) => void} [paired] a new pairing was kept
  * @property {import('./schema').Schemas} schemas
  * @property {(conn: Connection, method: string, params: any) => Promise<any>} call runs a capability method
  * @property {(conn: Connection, events: string[]) => string[]} subscribe
@@ -240,6 +242,11 @@ class Connection extends EventEmitter {
       this.emit('status', { status: 'pair-again', keyHeldBy: stored ? 'us' : 'them' });
       return this.close("Its proof was wrong: the pairing doesn't match");
     }
+    if (!stored && this.host.mayPair && !this.host.mayPair(expectedIds)) {
+      // A first pairing waits for this app's user to allow it: nothing is kept on either side yet.
+      this.emit('status', { status: 'confirm', peer: res.app });
+      return this.close('Waiting for you to allow the pairing');
+    }
     this.peer = res.app;
     this.peerId = this.expectedId; // the id this app knows it by, whatever it calls itself now
     this.peerIds = [...new Set([...expectedIds, ...theirIds])];
@@ -251,7 +258,10 @@ class Connection extends EventEmitter {
     } catch (err) {
       return this.refused(err);
     }
-    if (!stored) keys.set(this.peerId, key);
+    if (!stored) {
+      keys.set(this.peerId, key);
+      this.host.paired?.(this.peerId);
+    }
     this.ready();
     for (const m of this.queue.splice(0)) this.dispatch(m);
   }
@@ -259,7 +269,8 @@ class Connection extends EventEmitter {
   refused(err) {
     if (err.code === CODES.NOT_PAIRED && err.data?.reason === 'pair-again') {
       this.emit('status', { status: 'pair-again', keyHeldBy: err.data.keyHeldBy === 'listener' ? 'them' : 'us' });
-    } else if (err.code === CODES.SWITCHED_OFF) this.emit('status', { status: 'waiting', reason: 'switched-off' });
+    } else if (err.code === CODES.NOT_PAIRED && err.data?.reason === 'confirm') this.emit('status', { status: 'waiting', reason: 'confirm-there' });
+    else if (err.code === CODES.SWITCHED_OFF) this.emit('status', { status: 'waiting', reason: 'switched-off' });
     else if (err.code === CODES.UNSUPPORTED) this.emit('status', { status: 'incompatible', theirProtocol: err.data?.protocol ?? null });
     this.close(`Refused: ${err.message}`);
   }
@@ -284,6 +295,14 @@ class Connection extends EventEmitter {
       if (stored) {
         this.emit('status', { status: 'pair-again', peer: params.app, keyHeldBy: 'us' });
         return this.reject(id, new GrapevineError(CODES.NOT_PAIRED, 'Already paired with a different key', { reason: 'pair-again', keyHeldBy: 'listener' }));
+      }
+      if (this.host.mayPair && !this.host.mayPair(ids)) {
+        // A first pairing waits for this app's user to allow it.
+        this.emit('status', { status: 'confirm', peer: params.app });
+        return this.reject(
+          id,
+          new GrapevineError(CODES.NOT_PAIRED, `${this.host.self.name} is waiting for its user to allow the pairing`, { reason: 'confirm' }),
+        );
       }
       key = hs.newKey();
     } else {
@@ -318,7 +337,10 @@ class Connection extends EventEmitter {
       this.emit('status', { status: 'pair-again', peer: this.peer, keyHeldBy: 'them' });
       return this.reject(id, new GrapevineError(CODES.NOT_PAIRED, 'Wrong proof', { reason: 'pair-again', keyHeldBy: 'connector' }));
     }
-    if (pairing) this.host.keys.set(this.peerId, key);
+    if (pairing) {
+      this.host.keys.set(this.peerId, key);
+      this.host.paired?.(this.peerId);
+    }
     this.pending = null;
     this.rpc.reply(id, {});
     this.ready();

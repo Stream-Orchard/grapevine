@@ -94,7 +94,7 @@ The listening app checks it, in this order:
 2. No protocol version in both ranges: `-32003` with `data.protocol` (its own range), and close.
 3. Its switch for that app is off: `-32005`, and close. The app is known by `app.id` or any of `app.formerIds`, and the switch counts under any of them.
 4. **Pairing.**
-   - `pair: true` and it has no key for that app: it makes a new 32-byte random key `K`.
+   - `pair: true` and it has no key for that app: it makes a new 32-byte random key `K`. An app may first ask its user to allow a new pairing: until they do, `-32001` with `data: { reason: "confirm" }`, and close. The connecting app says to allow it there, and tries again (it backs off up to 30 seconds).
    - `pair: true` but it still has a key: `-32001` with `data: { reason: "pair-again", keyHeldBy: "listener" }`, and close. It accepts a new pairing only once its user presses **Pair again**, which deletes its key.
    - `pair: false` and it has no key: `-32001` with `data: { reason: "pair-again", keyHeldBy: "connector" }`, and close. The connecting app's user presses **Pair again** there.
    - Otherwise `K` is the key it has.
@@ -116,7 +116,7 @@ The connecting app checks the reply:
 - it speaks the `protocol` chosen;
 - the `proof` matches its key, or the `key` it was just given when pairing.
 
-If any check fails, it closes the connection. Then it proves it knows the key:
+If any check fails, it closes the connection. A connecting app that asks its user to allow a new pairing closes here too, until they do (without sending `link.auth`, so neither app keeps the key). Then it proves it knows the key:
 
 ```json
 { "jsonrpc": "2.0", "id": 2, "method": "link.auth", "params": { "proof": "<HMAC-SHA256(K, 'client:' + listener nonce), base64>" } }
@@ -152,18 +152,18 @@ When an app quits or crashes, its socket closes and the other app knows at once.
 
 The standard JSON-RPC codes, and Grapevine's:
 
-| Code     | Meaning                                                                                                                                                                      |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-32700` | Not JSON                                                                                                                                                                     |
-| `-32600` | Not a valid request (not an object, no method, a bad id)                                                                                                                     |
-| `-32601` | No such method, or the app doesn't answer it                                                                                                                                 |
-| `-32602` | Invalid params (`data.problems` lists what's wrong)                                                                                                                          |
-| `-32603` | The app failed to answer                                                                                                                                                     |
-| `-32001` | Not paired, or the proof was wrong. `data.reason` is `"pair-again"` when one app has a key the other doesn't, and `data.keyHeldBy` says which: `"listener"` or `"connector"` |
-| `-32002` | The capability wasn't agreed on this connection                                                                                                                              |
-| `-32003` | No version both apps support (`data.protocol` is the sender's range)                                                                                                         |
-| `-32004` | Too many messages                                                                                                                                                            |
-| `-32005` | Switched off in the app's Connected apps                                                                                                                                     |
+| Code     | Meaning                                                                                                                                                                                                                                                      |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `-32700` | Not JSON                                                                                                                                                                                                                                                     |
+| `-32600` | Not a valid request (not an object, no method, a bad id)                                                                                                                                                                                                     |
+| `-32601` | No such method, or the app doesn't answer it                                                                                                                                                                                                                 |
+| `-32602` | Invalid params (`data.problems` lists what's wrong)                                                                                                                                                                                                          |
+| `-32603` | The app failed to answer                                                                                                                                                                                                                                     |
+| `-32001` | Not paired, or the proof was wrong. `data.reason` is `"pair-again"` when one app has a key the other doesn't, and `data.keyHeldBy` says which: `"listener"` or `"connector"`; `"confirm"` while a new pairing waits for the listening app's user to allow it |
+| `-32002` | The capability wasn't agreed on this connection                                                                                                                                                                                                              |
+| `-32003` | No version both apps support (`data.protocol` is the sender's range)                                                                                                                                                                                         |
+| `-32004` | Too many messages                                                                                                                                                                                                                                            |
+| `-32005` | Switched off in the app's Connected apps                                                                                                                                                                                                                     |
 
 ## Capabilities
 
@@ -287,7 +287,7 @@ Claiming a former id only says where to look for a key. The app still has to pro
 **What pairing does:**
 
 - **Proves it's the same app as last time.** After the first pairing, both apps prove they hold the same random key on every connection, without sending it.
-- **The first pairing trusts whichever app answers to that id.** It happens only after the user has switched the link on in both apps.
+- **The first pairing trusts whichever app answers to that id.** It happens only after the user has switched the link on in both apps, and, in an app that asks for it, after they allow that pairing (which shows the name and version the other app gives).
 - **Replacing a pairing takes a user's press of Pair again.**
 - **What it can't stop:** a program already running as the user could read the keys, as it could read the apps' own logins.
 

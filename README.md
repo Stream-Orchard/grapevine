@@ -56,6 +56,7 @@ const link = createLink({
     decrypt: (t) => safeStorage.decryptString(Buffer.from(t, 'base64')),
   }),
   appDataDir: app.getPath('appData'), // to show "Not installed" for apps that aren't
+  confirmPairing: true, // a first pairing waits for your user's Allow on the card (see below)
 });
 
 await link.start();
@@ -118,18 +119,19 @@ Editors suggest every event's fields and underline mistakes, in plain JavaScript
 
 `link.peers()` lists every known app with what its card needs, and `link.on('change', …)` says when to draw it again.
 
-| Field                                 |                                                                                                              |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `name`, `summary`, `icon`, `download` | The app's logo (bundled, so it shows even when it isn't installed), one line about it, and where to get it   |
-| `installed`                           | Whether its data folder exists (with `appDataDir`)                                                           |
-| `enabled`                             | Your switch for it                                                                                           |
-| `status`                              | `off`, `waiting`, `connected`, `pair-again` or `incompatible`                                                |
-| `reason`                              | Why it's waiting: `switched-off` (its own switch is off), `disconnected-there`                               |
-| `keyHeldBy`                           | For `pair-again`: `us` means show **Pair again** here, `them` means it's pressed in the other app            |
-| `version`, `report.text`              | While connected: its version, and "Works" or what's missing ("update Pear Drops to 0.1.7 or later")          |
-| `pairedAt`, `keysEncrypted`           | When they paired, and whether keys are stored encrypted                                                      |
-| `formerIds`                           | Ids the app had before a rename                                                                              |
-| `shares`                              | What the two apps share: `{ out, in }`, capabilities this app provides that it uses, and the other way round |
+| Field                                 |                                                                                                                  |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `name`, `summary`, `icon`, `download` | The app's logo (bundled, so it shows even when it isn't installed), one line about it, and where to get it       |
+| `installed`                           | Whether its data folder exists (with `appDataDir`)                                                               |
+| `enabled`                             | Your switch for it                                                                                               |
+| `status`                              | `off`, `waiting`, `connected`, `pair-again`, `incompatible`, or `confirm` (it asks to pair: show **Allow**)      |
+| `reason`                              | Why it's waiting: `switched-off` (its own switch is off), `disconnected-there`, `confirm-there` (Allow it there) |
+| `asking`                              | For `confirm`: `{ name, version }`, as the asking app says in its hello                                          |
+| `keyHeldBy`                           | For `pair-again`: `us` means show **Pair again** here, `them` means it's pressed in the other app                |
+| `version`, `report.text`              | While connected: its version, and "Works" or what's missing ("update Pear Drops to 0.1.7 or later")              |
+| `pairedAt`, `keysEncrypted`           | When they paired, and whether keys are stored encrypted                                                          |
+| `formerIds`                           | Ids the app had before a rename                                                                                  |
+| `shares`                              | What the two apps share: `{ out, in }`, capabilities this app provides that it uses, and the other way round     |
 
 Three calls go with buttons on the card:
 
@@ -139,27 +141,30 @@ Three calls go with buttons on the card:
   - `off`: this app's is
   - `pair-again`: with where to press it
   - `incompatible`: which app to update
+  - `confirm`: it asks to pair, press Allow here; `confirm-there`: press Allow in that app
   - `no-answer`, `not-started`, `unknown`
 - **Disconnect:** `link.disconnect(appId)`. Turn your own switch for that app off too.
 - **Pair again:** `link.pairAgain(appId)`.
+- **Allow**, with `confirmPairing`: `link.allowPairing(appId)`. A first pairing (or one after Pair again) only happens once the user allows it: until then the card's `status` is `confirm`, with `asking` saying who asks, and the other app's card says `confirm-there`. Allow lasts two minutes; Pair again counts as one. The connecting app tries again within 30 seconds. Without `confirmPairing`, the first app to answer to that id pairs, while your switch is on (see "Security" in `PROTOCOL.md`).
 
 ### An activity log
 
 `link.on('message', …)` hears every message your app sends to or receives from another app, the hello included, so a page can show what goes between them. Nothing is worked out for it until something listens.
 
-| Field    |                                                                                                                  |
-| -------- | ---------------------------------------------------------------------------------------------------------------- |
-| `at`     | When it was sent or received (`Date.now()`)                                                                      |
-| `app`    | The other app's id, as your app knows it. `null` until its hello arrives (when the other app connected to yours) |
-| `dir`    | `out` (sent) or `in` (received)                                                                                  |
-| `kind`   | `request`, `reply`, `error` (a reply with an error) or `event`                                                   |
-| `method` | The method. For a reply or error, the method of the request it answers (`null` if that isn't known)              |
-| `id`     | The JSON-RPC id, for requests, replies and errors                                                                |
-| `ms`     | Replies and errors: how long since the request. Received, the round trip; sent, how long your app took to answer |
-| `bytes`  | Its size on the wire                                                                                             |
-| `data`   | The params of a request or event, the result of a reply, or `{ code, message }` of an error                      |
+| Field       |                                                                                                                  |
+| ----------- | ---------------------------------------------------------------------------------------------------------------- |
+| `at`        | When it was sent or received (`Date.now()`)                                                                      |
+| `app`       | The other app's id, as your app knows it. `null` until its hello arrives (when the other app connected to yours) |
+| `dir`       | `out` (sent) or `in` (received)                                                                                  |
+| `kind`      | `request`, `reply`, `error` (a reply with an error) or `event`                                                   |
+| `method`    | The method. For a reply or error, the method of the request it answers (`null` if that isn't known)              |
+| `id`        | The JSON-RPC id, for requests, replies and errors                                                                |
+| `ms`        | Replies and errors: how long since the request. Received, the round trip; sent, how long your app took to answer |
+| `bytes`     | Its size on the wire                                                                                             |
+| `data`      | The params of a request or event, the result of a reply, or `{ code, message }` of an error                      |
+| `truncated` | `true` when the message was over 16 KB: its `data` is left out                                                   |
 
-`link.hello` and `link.auth` and their replies have no `data`: they carry the nonces, proofs and pairing keys. Nor does a reply to a request that isn't known, before the two have finished saying hello, in case it's one of those.
+`link.hello` and `link.auth` and their replies have no `data`: they carry the nonces, proofs and pairing keys. Nor does anything received before the other app has proved the pairing: anything could be on the other end then, so it's only what kind of message it is and its size (the method is named only for `link.hello`, `link.auth`, `link.bye` and `link.ping`). Messages over the limit (50 a second) aren't in the log at all.
 
 ```js
 link.on('message', (m) => {

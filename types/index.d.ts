@@ -89,6 +89,8 @@ export interface LinkOptions {
   timing?: Partial<Timing>;
   /** Throw on a message that doesn't fit its schema (default: when NODE_ENV is "test") */
   strict?: boolean;
+  /** A first pairing (or one after Pair again) waits for the user's Allow: allowPairing() */
+  confirmPairing?: boolean;
   log?: (level: 'info' | 'warn' | 'error', text: string) => void;
 }
 
@@ -114,9 +116,12 @@ export interface Peer {
   installed: boolean | null;
   /** Whether this app's switch for it is on */
   enabled: boolean;
-  status: 'off' | 'waiting' | 'connected' | 'pair-again' | 'incompatible';
-  /** e.g. 'switched-off' (its own switch is off), 'disconnected-there' */
+  /** 'confirm': it asks to pair, and waits for Allow (confirmPairing) */
+  status: 'off' | 'waiting' | 'connected' | 'pair-again' | 'incompatible' | 'confirm';
+  /** e.g. 'switched-off' (its own switch is off), 'disconnected-there', 'confirm-there' (Allow it in that app) */
   reason: string | null;
+  /** For 'confirm': who asks, as its hello says */
+  asking: { name: string; version: string } | null;
   /** For 'pair-again': which app holds the old key, so where to press Pair again */
   keyHeldBy: 'us' | 'them' | null;
   /** Its version, while connected */
@@ -132,7 +137,7 @@ export type TestResult =
   | { ok: true; ms: number; version: string; text: string }
   | {
       ok: false;
-      reason: 'unknown' | 'off' | 'not-started' | 'not-running' | 'switched-off' | 'pair-again' | 'incompatible' | 'no-answer';
+      reason: 'unknown' | 'off' | 'not-started' | 'not-running' | 'switched-off' | 'pair-again' | 'incompatible' | 'confirm' | 'confirm-there' | 'no-answer';
       /** In words, for the card: "Stream Multiview isn't open" */
       text: string;
     };
@@ -156,9 +161,12 @@ export interface Message {
   bytes: number;
   /**
    * The params (request, event), the result (reply), or `{ code, message }` (error). Left out for
-   * link.hello and link.auth and their replies: they carry nonces, proofs and pairing keys.
+   * link.hello and link.auth and their replies: they carry nonces, proofs and pairing keys. Also left out
+   * for anything received before the other app has proved the pairing, and when over 16 KB (truncated).
    */
   data?: unknown;
+  /** The message was over 16 KB: its data is left out */
+  truncated?: boolean;
 }
 
 export interface CallContext {
@@ -186,8 +194,10 @@ export declare class Link extends EventEmitter {
   request(appId: string, method: string, params?: Record<string, unknown>, opts?: { timeout?: number }): Promise<unknown>;
   /** Disconnect on a card: both apps forget the pairing. Switch this app's own setting off too. */
   disconnect(appId: string): Promise<void>;
-  /** Pair again on a card: forgets this app's old key. */
+  /** Pair again on a card: forgets this app's old key (and allows a new pairing, with confirmPairing). */
   pairAgain(appId: string): void;
+  /** Allow on a card (confirmPairing): a new pairing with that app may happen in the next two minutes. */
+  allowPairing(appId: string): void;
   isConnected(appId: string): boolean;
   /** Test on a card: checks the link now, and says how it went. Tries straight away when not connected. */
   test(appId: string, opts?: { timeout?: number }): Promise<TestResult>;
