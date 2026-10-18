@@ -1,0 +1,4 @@
+{
+  "event": "players.changed",
+  "params": { "seq": 2, "at": "2026-10-18T09:00:00Z", "platforms": { "kick": { "signedIn": true, "mode": "signed-in", "account": null } } }
+}

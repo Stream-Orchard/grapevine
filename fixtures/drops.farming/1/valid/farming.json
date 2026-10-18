@@ -1,0 +1,11 @@
+{
+  "event": "drops.farming.changed",
+  "params": {
+    "seq": 42,
+    "at": "2026-10-18T09:12:04.120Z",
+    "state": "farming",
+    "account": { "platform": "kick", "user": "pearfan" },
+    "channel": { "platform": "kick", "slug": "pixelpear", "name": "PixelPear" },
+    "drop": { "campaign": "Neon Rush Launch Week", "category": "Neon Rush", "progress": { "done": 48, "total": 120, "unit": "minutes" } }
+  }
+}

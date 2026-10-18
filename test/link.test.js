@@ -1,0 +1,490 @@
+// Two real links over real sockets, and a raw client for what a well-behaved app never sends.
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs');
+const net = require('net');
+const hs = require('../src/handshake');
+const { createLink, CODES, memoryKeyStore, paths } = require('../src');
+const { LineReader, encode } = require('../src/framing');
+const { PD, MV, FAST, tmpPlace, pair, once, until, sleep, raw } = require('./helpers');
+
+const FARMING = {
+  state: 'farming',
+  account: { platform: 'kick', user: 'pearfan' },
+  channel: { platform: 'kick', slug: 'pixelpear', name: 'PixelPear' },
+  drop: null,
+};
+const PLAYERS = { platforms: { kick: { signedIn: false, mode: 'auto', account: null, open: [{ platform: 'kick', slug: 'pixelpear' }] } } };
+
+/** Runs fn with a fresh folder, stopping every link it made. */
+function withPlace(fn) {
+  return async () => {
+    const t = tmpPlace();
+    const links = [];
+    const track = (...ls) => (links.push(...ls), ls);
+    try {
+      await fn(t, track);
+    } finally {
+      for (const l of links) await l.stop().catch(() => {});
+      t.cleanup();
+    }
+  };
+}
+
+/** Says hello as Stream Multiview from a raw client, and proves the pairing. */
+async function rawHello(
+  r,
+  { app = MV, pair: wantPair = true, key, capabilities = { 'drops.farming': { uses: ['1.0'] }, players: { provides: ['1.0'] } } } = {},
+) {
+  const clientNonce = hs.nonce();
+  r.send({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'link.hello',
+    params: { protocol: { min: 1, max: 1 }, app, capabilities, auth: { nonce: clientNonce, pair: wantPair } },
+  });
+  const res = await r.next();
+  if (res.error) return { res };
+  const k = key ?? res.result.auth.key;
+  assert.ok(hs.proofOk(k, 'server', clientNonce, res.result.auth.proof), 'the listener proved itself');
+  r.send({ jsonrpc: '2.0', id: 2, method: 'link.auth', params: { proof: hs.proof(k, 'client', res.result.auth.nonce) } });
+  const auth = await r.next();
+  return { res, auth, key: k };
+}
+
+/** The next message from a raw client that isn't the listener's own subscribe request. */
+async function nextOwn(r) {
+  for (;;) {
+    const m = await r.next();
+    if (m?.method !== 'link.subscribe') return m;
+  }
+}
+
+test(
+  'two apps pair the first time, then trade events both ways and answer requests',
+  withPlace(async ({ place }, track) => {
+    const { pd, mv } = pair(place);
+    track(pd, mv);
+    await pd.start();
+    assert.deepEqual(
+      pd.peers().map((p) => [p.name, p.status]),
+      [['Stream Multiview', 'waiting']],
+    );
+    pd.publish('drops.farming.changed', FARMING); // before anyone is listening: kept for later
+    const got = once(mv, 'event');
+    await mv.start();
+    await once(mv, 'connected');
+    const [from, name, params] = await got;
+    assert.equal(from, PD.id);
+    assert.equal(name, 'drops.farming.changed');
+    assert.equal(params.channel.slug, 'pixelpear', 'a new subscriber gets the latest state at once');
+    assert.equal(params.seq, 1);
+
+    const back = once(pd, 'event');
+    mv.publish('players.changed', PLAYERS);
+    assert.equal((await back)[2].platforms.kick.mode, 'auto');
+
+    const next = once(mv, 'event');
+    pd.publish('drops.farming.changed', { ...FARMING, state: 'paused', channel: null });
+    assert.equal((await next)[2].seq, 2);
+    assert.equal((await mv.request(PD.id, 'drops.farming.get')).state, 'paused', 'a .get with no handler answers with the last .changed');
+
+    const [peer] = pd.peers();
+    assert.equal(peer.status, 'connected');
+    assert.equal(peer.version, '0.4.0');
+    assert.equal(peer.report.text, 'Works');
+    assert.match(peer.pairedAt, /^\d{4}-/);
+    assert.ok(pd.isConnected(MV.id));
+    assert.ok(pd.keys.get(MV.id).key === mv.keys.get(PD.id).key, 'both kept the same key');
+  }),
+);
+
+test(
+  'after a restart they connect with the key they kept, without pairing again; a stop is noticed at once',
+  withPlace(async ({ place }, track) => {
+    const keys = { pd: memoryKeyStore(), mv: memoryKeyStore() };
+    const first = pair(place, { pd: { keys: keys.pd }, mv: { keys: keys.mv } });
+    const { mv } = first;
+    let { pd } = first;
+    track(pd, mv);
+    await pd.start();
+    await mv.start();
+    await once(mv, 'connected');
+    const key = keys.pd.get(MV.id).key;
+    const gone = once(mv, 'disconnected');
+    await pd.stop();
+    assert.match((await gone)[1], /Pear Drops quit/);
+    if (process.platform !== 'win32') assert.ok(!fs.existsSync(paths.socketPath(PD.slug, place)), 'its socket is removed');
+    ({ pd } = pair(place, { pd: { keys: keys.pd } }));
+    track(pd);
+    await pd.start();
+    await once(pd, 'connected');
+    assert.equal(keys.pd.get(MV.id).key, key, 'the same key');
+    await pd.stop();
+    await pd.stop(); // twice is fine
+    await mv.start(); // already running: nothing happens
+  }),
+);
+
+test(
+  'the switch: an app switched off is refused and shown as Off; switching it on connects, switching off disconnects',
+  withPlace(async ({ place }, track) => {
+    let pdAllows = false;
+    const { pd, mv } = pair(place, { pd: { allowed: () => pdAllows } });
+    track(pd, mv);
+    await pd.start();
+    await mv.start();
+    await until(() => mv.peers()[0].reason === 'switched-off', 'Stream Multiview to be refused');
+    assert.equal(mv.peers()[0].status, 'waiting');
+    assert.equal(pd.peers()[0].status, 'off');
+    pdAllows = true;
+    pd.refresh();
+    await until(() => mv.isConnected(PD.id), 'connected once switched on');
+    const gone = once(mv, 'disconnected');
+    pdAllows = false;
+    pd.refresh();
+    assert.match((await gone)[1], /Switched off in Pear Drops/);
+    let mvAllows = true;
+    const { mv: mv2 } = pair(place, { mv: { allowed: () => mvAllows } });
+    assert.equal(mv2.peers()[0].status, 'waiting');
+    mvAllows = false;
+    assert.equal(mv2.peers()[0].status, 'off');
+    const throwing = createLink({
+      app: PD,
+      allowed: () => {
+        throw new Error('settings not loaded');
+      },
+    });
+    assert.equal(throwing.peers()[0].enabled, false, 'a switch that fails to answer counts as off');
+  }),
+);
+
+test(
+  'Disconnect: both apps forget the pairing',
+  withPlace(async ({ place }, track) => {
+    const { pd, mv } = pair(place);
+    track(pd, mv);
+    await pd.start();
+    await mv.start();
+    await once(mv, 'connected');
+    const unpaired = once(pd, 'unpaired');
+    await mv.disconnect(PD.id);
+    assert.equal((await unpaired)[0], MV.id);
+    assert.equal(mv.keys.get(PD.id), null);
+    await until(() => pd.keys.get(MV.id) === null, 'Pear Drops to forget the key');
+    assert.equal(pd.peers()[0].reason, 'disconnected-there');
+    await pd.disconnect(MV.id); // not connected: just forgets
+  }),
+);
+
+test(
+  'Pair again: when one app lost its key, the card says which app to press it in, and pressing it pairs afresh',
+  withPlace(async ({ place }, track) => {
+    // Stream Multiview kept its key, Pear Drops lost it (reinstalled).
+    const { pd, mv } = pair(place);
+    track(pd, mv);
+    mv.keys.set(PD.id, hs.newKey());
+    await pd.start();
+    await mv.start();
+    await until(() => mv.peers()[0].status === 'pair-again' && pd.peers()[0].status === 'pair-again', 'both to need pairing again');
+    assert.equal(mv.peers()[0].keyHeldBy, 'us');
+    assert.equal(pd.peers()[0].keyHeldBy, 'them');
+    mv.pairAgain(PD.id);
+    await until(() => mv.isConnected(PD.id), 'paired afresh');
+
+    // The other way round: Pear Drops kept a key, Stream Multiview lost its own.
+    await mv.stop();
+    const { mv: fresh } = pair(place);
+    track(fresh);
+    await fresh.start();
+    await until(() => fresh.peers()[0].status === 'pair-again' && pd.peers()[0].keyHeldBy === 'us', 'the listener to hold the old key');
+    assert.equal(fresh.peers()[0].keyHeldBy, 'them');
+    pd.pairAgain(MV.id);
+    await until(() => fresh.isConnected(PD.id), 'paired afresh');
+  }),
+);
+
+test(
+  'keys that differ fail the proof, and neither app trusts the other',
+  withPlace(async ({ place }, track) => {
+    const { pd, mv } = pair(place);
+    track(pd, mv);
+    pd.keys.set(MV.id, hs.newKey());
+    mv.keys.set(PD.id, hs.newKey());
+    await pd.start();
+    await mv.start();
+    await until(() => mv.peers()[0].status === 'pair-again', 'a wrong proof');
+    assert.ok(!mv.isConnected(PD.id));
+  }),
+);
+
+test(
+  'one copy per app: a second one is refused, and a socket left by a crash is replaced',
+  withPlace(async ({ place }, track) => {
+    const { pd } = pair(place);
+    const { pd: twin } = pair(place);
+    track(pd);
+    await pd.start();
+    if (process.platform === 'win32') return;
+    await assert.rejects(twin.start(), /Another copy of Pear Drops/);
+    await pd.stop();
+    fs.writeFileSync(paths.socketPath(PD.slug, place), ''); // a leftover, nobody listening
+    const { pd: again } = pair(place);
+    track(again);
+    await again.start();
+    assert.ok(fs.statSync(paths.socketPath(PD.slug, place)).isSocket());
+  }),
+);
+
+test(
+  'the hello is checked: bad fields, no protocol in common, and anything before it are refused',
+  withPlace(async ({ place }, track) => {
+    const { pd } = pair(place);
+    track(pd);
+    await pd.start();
+    const sock = paths.socketPath(PD.slug, place);
+
+    const early = await raw(sock);
+    early.send({ jsonrpc: '2.0', id: 9, method: 'drops.farming.get', params: {} });
+    assert.equal((await early.next()).error.code, CODES.NOT_PAIRED);
+    early.close();
+
+    const bad = await raw(sock);
+    bad.send({ jsonrpc: '2.0', id: 1, method: 'link.hello', params: { app: { id: 'X' } } });
+    const refusal = await bad.next();
+    assert.equal(refusal.error.code, CODES.INVALID_PARAMS);
+    assert.ok(refusal.error.data.problems.length > 3);
+    assert.equal(await bad.next(), null, 'then closed');
+
+    const future = await raw(sock);
+    future.send({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'link.hello',
+      params: { protocol: { min: 7, max: 9 }, app: MV, capabilities: {}, auth: { nonce: hs.nonce() } },
+    });
+    const no = await future.next();
+    assert.equal(no.error.code, CODES.UNSUPPORTED);
+    assert.deepEqual(no.error.data.protocol, hs.PROTOCOL);
+    await until(() => pd.peers()[0].status === 'incompatible', 'shown as incompatible');
+    assert.equal(pd.peers()[0].report.text, "Can't connect: update Pear Drops");
+
+    const silent = await raw(sock);
+    await until(() => silent.closed(), 'a connection that never says hello to be closed', 3000);
+  }),
+);
+
+test(
+  'messages that break the rules: not JSON, too long, or too many',
+  withPlace(async ({ place }, track) => {
+    const { pd } = pair(place, { pd: { timing: { ...FAST, rateMax: 5, strikes: 2 } } });
+    track(pd);
+    await pd.start();
+    const sock = paths.socketPath(PD.slug, place);
+
+    const junk = await raw(sock);
+    junk.send('this is not json\n');
+    assert.equal((await junk.next()).error.code, CODES.PARSE_ERROR);
+    junk.send('[1]\n');
+    assert.equal((await junk.next()).error.code, CODES.INVALID_REQUEST);
+    junk.send(`${'x'.repeat(1024 * 1024 + 1)}\n`);
+    assert.equal(await junk.next(), null, 'a line over 1 MiB closes the connection');
+
+    const busy = await raw(sock);
+    for (let i = 0; i < 8; i++) busy.send({ jsonrpc: '2.0', id: 100 + i, method: 'link.ping', params: {} });
+    const replies = [];
+    for (let m = await busy.next(); m; m = await busy.next().catch(() => null)) replies.push(m);
+    assert.ok(
+      replies.some((m) => m.error?.code === CODES.TOO_MANY),
+      'told to slow down',
+    );
+    await sleep(1050);
+    for (let i = 0; i < 8; i++) busy.send({ jsonrpc: '2.0', id: 200 + i, method: 'link.ping', params: {} });
+    await until(() => busy.closed(), 'closed after going over the limit twice');
+  }),
+);
+
+test(
+  'once paired: only agreed capabilities, checked params, subscriptions with the latest state, and a goodbye',
+  withPlace(async ({ place }, track) => {
+    const { pd } = pair(place);
+    track(pd);
+    pd.handle('drops.farming.get', () => ({ ...FARMING, seq: 0, at: new Date().toISOString() }));
+    await pd.start();
+    pd.publish('drops.farming.changed', FARMING);
+    const r = await raw(paths.socketPath(PD.slug, place));
+    const { auth } = await rawHello(r);
+    assert.deepEqual(auth.result, {});
+    assert.ok(pd.keys.get(MV.id), 'paired');
+
+    r.send({ jsonrpc: '2.0', id: 3, method: 'link.ping', params: {} });
+    assert.deepEqual((await nextOwn(r)).result, {});
+    r.send({ jsonrpc: '2.0', id: 4, method: 'link.subscribe', params: { events: ['drops.farming.changed', 'players.changed', 'nope'] } });
+    assert.deepEqual((await nextOwn(r)).result, { subscribed: ['drops.farming.changed'] }, 'only what Pear Drops provides');
+    const latest = await nextOwn(r);
+    assert.equal(latest.method, 'drops.farming.changed');
+    assert.equal(latest.params.state, 'farming');
+
+    r.send({ jsonrpc: '2.0', id: 5, method: 'drops.farming.get', params: {} });
+    assert.equal((await nextOwn(r)).result.seq, 0, 'its own handler answers');
+    r.send({ jsonrpc: '2.0', id: 6, method: 'players.get', params: {} });
+    assert.equal((await nextOwn(r)).error.code, CODES.NOT_AGREED, "Pear Drops doesn't provide players");
+    r.send({ jsonrpc: '2.0', id: 7, method: 'nothing.at.all', params: {} });
+    assert.equal((await nextOwn(r)).error.code, CODES.METHOD_NOT_FOUND);
+    r.send({ jsonrpc: '2.0', id: 8, method: 'drops.farming.nope', params: {} });
+    assert.equal((await nextOwn(r)).error.code, CODES.METHOD_NOT_FOUND);
+    r.send({ jsonrpc: '2.0', id: 9, method: 'drops.farming.get', params: { x: 1 } }); // extra fields are fine
+    assert.ok((await nextOwn(r)).result);
+
+    // Events from it: only valid ones of capabilities Pear Drops uses get through.
+    const heard = [];
+    pd.on('event', (_f, name, params) => heard.push([name, params.seq]));
+    r.send({ jsonrpc: '2.0', method: 'players.changed', params: { seq: 1, at: 'not a time', platforms: {} } });
+    r.send({ jsonrpc: '2.0', method: 'drops.farming.changed', params: { ...FARMING, seq: 1, at: new Date().toISOString() } });
+    r.send({ jsonrpc: '2.0', method: 'players.changed', params: { seq: 2, at: new Date().toISOString(), platforms: {} } });
+    await until(() => heard.length === 1, 'the valid event');
+    assert.deepEqual(heard, [['players.changed', 2]]);
+
+    const gone = once(pd, 'disconnected');
+    r.send({ jsonrpc: '2.0', method: 'link.bye', params: { reason: 'testing' } });
+    assert.match((await gone)[1], /said goodbye \(testing\)/);
+  }),
+);
+
+test(
+  'a handler that fails, or answers with the wrong shape, gets an error back rather than bad data',
+  withPlace(async ({ place }, track) => {
+    const { pd, mv } = pair(place, { pd: { strict: false } });
+    track(pd, mv);
+    const logged = [];
+    pd.on('log', (level, text) => logged.push(`${level}: ${text}`));
+    pd.handle('drops.farming.get', () => ({ state: 'farming' }));
+    await pd.start();
+    await mv.start();
+    await once(mv, 'connected');
+    await assert.rejects(mv.request(PD.id, 'drops.farming.get'), (e) => e.code === CODES.INTERNAL_ERROR);
+    assert.ok(logged.some((l) => /invalid result/.test(l)));
+    pd.handle('drops.farming.get', () => {
+      throw new Error('boom');
+    });
+    await assert.rejects(mv.request(PD.id, 'drops.farming.get'), (e) => e.code === CODES.INTERNAL_ERROR);
+    assert.ok(logged.some((l) => /boom/.test(l)));
+    pd.handle('drops.farming.get', () => {
+      throw Object.assign(new (require('../src').GrapevineError)(CODES.TOO_MANY, 'busy'));
+    });
+    await assert.rejects(mv.request(PD.id, 'drops.farming.get'), (e) => e.code === CODES.TOO_MANY, 'its own code is kept');
+    // Asking: not connected, not agreed, bad params, or a bad answer.
+    await assert.rejects(pd.request('nobody', 'players.get'), (e) => e.code === CODES.CLOSED);
+    await assert.rejects(mv.request(PD.id, 'players.get'), (e) => e.code === CODES.NOT_AGREED);
+    await assert.rejects(mv.request(PD.id, 'drops.farming.get', /** @type {any} */ ('x')), (e) => e.code === CODES.INVALID_PARAMS);
+    mv.handle('players.get', () => ({ seq: 0, at: new Date().toISOString(), platforms: { kick: { signedIn: 'yes' } } }));
+    await assert.rejects(pd.request(MV.id, 'players.get'), (e) => e.code === CODES.INTERNAL_ERROR);
+    // Publishing something that doesn't fit: logged, and not sent.
+    const sent = pd.publish('drops.farming.changed', /** @type {any} */ ({ state: 1 }));
+    assert.equal(sent.seq, 1);
+    assert.ok(logged.some((l) => /doesn't fit/.test(l)));
+  }),
+);
+
+test(
+  'strict mode throws on a message that does not fit; nothing published yet means .get has no answer',
+  withPlace(async ({ place }, track) => {
+    const { pd, mv } = pair(place);
+    track(pd, mv);
+    assert.throws(() => pd.publish('drops.farming.changed', /** @type {any} */ ({ state: 1 })), /doesn't fit its schema/);
+    assert.throws(() => pd.publish('players.changed', /** @type {any} */ (PLAYERS)), /isn't part of a capability Pear Drops provides/);
+    assert.throws(() => pd.publish('nothing.changed', {}), /isn't part of a capability/);
+    await pd.start();
+    await mv.start();
+    await once(mv, 'connected');
+    await assert.rejects(mv.request(PD.id, 'drops.farming.get'), (e) => e.code === CODES.METHOD_NOT_FOUND && /doesn't answer/.test(e.message));
+  }),
+);
+
+test('createLink checks the app it describes and the versions it lists', () => {
+  assert.throws(() => createLink({ app: { ...PD, id: 'Bad Id' }, allowed: () => true }), /app\.id/);
+  assert.throws(() => createLink({ app: PD, provides: { 'drops.farming': '9.0' }, allowed: () => true }), /no schema for drops\.farming 9\.0/);
+  const withIcon = createLink({ app: { ...PD, icon: require('../src/known-apps').KNOWN_APPS[0].icon }, allowed: () => true });
+  assert.match(withIcon.self.icon, /^data:image\/png;base64,/, 'a logo file is sent as a data URL');
+});
+
+test(
+  'the connecting app: refused, an impostor, a wrong proof, or a hung app',
+  withPlace(async ({ place }, track) => {
+    // A raw "Pear Drops" that answers however each case needs.
+    let behave = 'switched-off';
+    const server = net.createServer((socket) => {
+      const reader = new LineReader(
+        (m) => {
+          const send = (o) => socket.write(encode(o));
+          if (m.method === 'link.hello') {
+            if (behave === 'switched-off') return send({ jsonrpc: '2.0', id: m.id, error: { code: CODES.SWITCHED_OFF, message: 'off' } });
+            if (behave === 'future')
+              return send({ jsonrpc: '2.0', id: m.id, error: { code: CODES.UNSUPPORTED, message: 'no', data: { protocol: { min: 5, max: 5 } } } });
+            const key = hs.newKey();
+            const app = behave === 'impostor' ? { ...PD, id: 'com.someone.else' } : PD;
+            const proofOf = behave === 'wrong-proof' ? hs.proof(hs.newKey(), 'server', m.params.auth.nonce) : hs.proof(key, 'server', m.params.auth.nonce);
+            return send({
+              jsonrpc: '2.0',
+              id: m.id,
+              result: { protocol: 1, app, capabilities: { 'drops.farming': { provides: ['1.0'] } }, auth: { proof: proofOf, nonce: hs.nonce(), key } },
+            });
+          }
+          if (m.method === 'link.auth') return send({ jsonrpc: '2.0', id: m.id, result: {} });
+          // 'hung': never answers a ping
+        },
+        () => {},
+      );
+      socket.on('data', (d) => reader.push(d));
+      socket.on('error', () => {});
+    });
+    paths.ensureDir(place);
+    await new Promise((r) => server.listen(paths.socketPath(PD.slug, place), r));
+    try {
+      const { mv } = pair(place);
+      track(mv);
+      await mv.start();
+      await until(() => mv.peers()[0].reason === 'switched-off', 'refused: switched off there');
+      behave = 'future';
+      mv.refresh();
+      await until(() => mv.peers()[0].status === 'incompatible', 'no protocol in common');
+      assert.equal(mv.peers()[0].report.text, "Can't connect: update Stream Multiview", 'it has the older protocol');
+      behave = 'wrong-proof';
+      mv.refresh();
+      await until(() => mv.peers()[0].status === 'pair-again', 'a wrong proof');
+      behave = 'impostor';
+      mv.refresh();
+      await sleep(150);
+      assert.ok(!mv.isConnected(PD.id), 'an app with a different id is never trusted');
+      behave = 'hung';
+      mv.refresh();
+      await until(() => mv.isConnected(PD.id), 'connected');
+      const [, reason] = await once(mv, 'disconnected', 3000);
+      assert.match(reason, /stopped answering/);
+    } finally {
+      await new Promise((r) => server.close(r));
+    }
+  }),
+);
+
+test(
+  'the listening app closes a connection that goes quiet, and keeps one connection when both connect',
+  withPlace(async ({ place }, track) => {
+    const { pd, mv } = pair(place);
+    track(pd, mv);
+    await pd.start();
+    const r = await raw(paths.socketPath(PD.slug, place));
+    await rawHello(r);
+    await until(() => r.closed(), 'closed after three missed pings', 3000);
+
+    pd.pairAgain(MV.id); // the raw client paired as Stream Multiview: start afresh for the real one
+    await mv.start();
+    await once(mv, 'connected');
+    pd.connect({ id: MV.id, slug: MV.slug }); // Pear Drops connects too, which it normally leaves to Stream Multiview
+    await sleep(300);
+    assert.equal(pd.conns.size, 1);
+    assert.ok(mv.isConnected(PD.id) && pd.isConnected(MV.id), 'still connected, once');
+  }),
+);

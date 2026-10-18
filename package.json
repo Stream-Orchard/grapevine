@@ -1,0 +1,68 @@
+{
+  "name": "@streamorchard/grapevine",
+  "version": "0.1.0",
+  "description": "Lets desktop apps on the same computer find each other and talk, privately: local sockets, JSON-RPC, pairing and versioned capabilities.",
+  "license": "GPL-3.0-only",
+  "author": "StreamOrchard",
+  "homepage": "https://github.com/Stream-Orchard/grapevine#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Stream-Orchard/grapevine.git"
+  },
+  "bugs": "https://github.com/Stream-Orchard/grapevine/issues",
+  "keywords": [
+    "ipc",
+    "local",
+    "json-rpc",
+    "unix-socket",
+    "named-pipe",
+    "electron",
+    "desktop",
+    "pairing"
+  ],
+  "main": "src/index.js",
+  "types": "types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./stand-in-peer": "./stand-in-peer.js",
+    "./fixtures": "./fixtures/index.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "grapevine-stand-in": "stand-in-peer.js"
+  },
+  "files": [
+    "src",
+    "types",
+    "schemas",
+    "fixtures",
+    "assets/apps",
+    "stand-in-peer.js",
+    "PROTOCOL.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test --test-force-exit --test-timeout=60000 \"test/**/*.test.js\"",
+    "test:coverage": "node --test --test-force-exit --test-timeout=60000 --experimental-test-coverage --test-coverage-lines=90 --test-coverage-branches=80 --test-coverage-functions=90 --test-coverage-exclude=\"test/**\" \"test/**/*.test.js\"",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write . && eslint --fix .",
+    "types": "node scripts/types.js",
+    "check": "node scripts/types.js --check && tsc -p jsconfig.json"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.5",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

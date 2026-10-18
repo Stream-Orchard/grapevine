@@ -1,0 +1,13 @@
+{
+  "event": "drops.farming.changed",
+  "note": "A state and a field from a later minor version: both must be accepted",
+  "params": {
+    "seq": 44,
+    "at": "2026-10-18T10:00:00Z",
+    "state": "cooling-down",
+    "account": null,
+    "channel": null,
+    "drop": null,
+    "nextCheckAt": "2026-10-18T10:05:00Z"
+  }
+}

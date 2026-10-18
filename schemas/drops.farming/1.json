@@ -1,0 +1,45 @@
+{
+  "capability": "drops.farming",
+  "major": 1,
+  "minor": 0,
+  "description": "What a drops app is farming. Provided by Pear Drops.",
+  "events": {
+    "drops.farming.changed": { "$ref": "#State" }
+  },
+  "methods": {
+    "drops.farming.get": { "params": { "$ref": "common:Empty" }, "result": { "$ref": "#State" } }
+  },
+  "defs": {
+    "State": {
+      "type": "object",
+      "required": ["seq", "at", "state", "account", "channel", "drop"],
+      "properties": {
+        "seq": { "type": "integer", "minimum": 0, "description": "Counts up with each change; 0 for a reply to drops.farming.get" },
+        "at": { "$ref": "common:Timestamp" },
+        "state": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "x-open": ["farming", "waiting", "paused", "done", "signed-out"],
+          "description": "farming: its player is watching a stream for drop credit. Any other value, known or not, means it isn't."
+        },
+        "account": { "anyOf": [{ "$ref": "common:Account" }, { "type": "null" }] },
+        "channel": { "anyOf": [{ "$ref": "common:Channel" }, { "type": "null" }], "description": "The stream being watched, while farming" },
+        "drop": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["campaign", "category", "progress"],
+              "properties": {
+                "campaign": { "type": "string", "maxLength": 200 },
+                "category": { "type": "string", "maxLength": 200 },
+                "progress": { "$ref": "common:Progress" }
+              }
+            },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "event": "players.changed",
+  "params": {
+    "seq": 7,
+    "at": "2026-10-18T09:12:05Z",
+    "platforms": {
+      "kick": {
+        "signedIn": false,
+        "mode": "auto",
+        "account": { "platform": "kick", "user": "pearfan" },
+        "open": [
+          { "platform": "kick", "slug": "pixelpear" },
+          { "platform": "kick", "slug": "moonlitmaple" }
+        ]
+      }
+    }
+  }
+}

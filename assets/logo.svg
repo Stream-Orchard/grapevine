@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs>
+  <linearGradient id="bgg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#121a15"/><stop offset="1" stop-color="#060908"/></linearGradient>
+  <radialGradient id="glow" cx=".5" cy=".46" r=".6"><stop offset="0" stop-color="#3dff8a" stop-opacity=".22"/><stop offset="1" stop-color="#3dff8a" stop-opacity="0"/></radialGradient>
+  <linearGradient id="fruit" gradientUnits="userSpaceOnUse" x1="0" y1="125" x2="0" y2="460"><stop offset="0" stop-color="#c4ff5c"/><stop offset=".5" stop-color="#4cf56a"/><stop offset="1" stop-color="#14c79a"/></linearGradient>
+  <radialGradient id="talk" cx=".38" cy=".34" r=".75"><stop offset="0" stop-color="#f4ffd9"/><stop offset=".35" stop-color="#c4ff5c"/><stop offset="1" stop-color="#4cf56a"/></radialGradient>
+  <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c4ff5c"/><stop offset="1" stop-color="#2fd36b"/></linearGradient>
+  <filter id="soft" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="14"/></filter>
+</defs>
+<rect width="512" height="512" rx="112" fill="url(#bgg)"/>
+<rect width="512" height="512" rx="112" fill="url(#glow)"/>
+<rect x="1" y="1" width="510" height="510" rx="111" fill="none" stroke="#3dff8a" stroke-opacity=".14" stroke-width="2"/>
+<!-- stem, tendril and leaf -->
+<path d="M256 130 C256 108 262 92 276 78" fill="none" stroke="#4cf56a" stroke-width="10" stroke-linecap="round"/>
+<path d="M270 86 C300 70 330 78 334 100 C338 120 316 128 306 116 C298 106 310 96 318 102" fill="none" stroke="#7dfa7a" stroke-width="6" stroke-linecap="round" opacity=".85"/>
+<path d="M250 104 C214 66 166 70 142 96 C176 124 222 128 250 104 Z" fill="url(#leaf)"/>
+<path d="M248 104 C214 98 184 96 150 97" fill="none" stroke="#0e3a1f" stroke-width="3.5" stroke-linecap="round" opacity=".5"/>
+<!-- the bunch -->
+<circle cx="118" cy="172" r="43" fill="url(#fruit)"/><ellipse cx="104" cy="156" rx="13" ry="9" fill="#fff" opacity=".22" transform="rotate(-30 104 156)"/><circle cx="210" cy="172" r="43" fill="url(#fruit)"/><ellipse cx="196" cy="156" rx="13" ry="9" fill="#fff" opacity=".22" transform="rotate(-30 196 156)"/><circle cx="302" cy="172" r="43" fill="url(#fruit)"/><ellipse cx="288" cy="156" rx="13" ry="9" fill="#fff" opacity=".22" transform="rotate(-30 288 156)"/><circle cx="394" cy="172" r="43" fill="url(#fruit)"/><ellipse cx="380" cy="156" rx="13" ry="9" fill="#fff" opacity=".22" transform="rotate(-30 380 156)"/><circle cx="164" cy="252" r="43" fill="url(#fruit)"/><ellipse cx="150" cy="236" rx="13" ry="9" fill="#fff" opacity=".22" transform="rotate(-30 150 236)"/><circle cx="348" cy="252" r="43" fill="url(#fruit)"/><ellipse cx="334" cy="236" rx="13" ry="9" fill="#fff" opacity=".22" transform="rotate(-30 334 236)"/><circle cx="210" cy="332" r="43" fill="url(#fruit)"/><ellipse cx="196" cy="316" rx="13" ry="9" fill="#fff" opacity=".22" transform="rotate(-30 196 316)"/><circle cx="302" cy="332" r="43" fill="url(#fruit)"/><ellipse cx="288" cy="316" rx="13" ry="9" fill="#fff" opacity=".22" transform="rotate(-30 288 316)"/><circle cx="256" cy="412" r="43" fill="url(#fruit)"/><ellipse cx="242" cy="396" rx="13" ry="9" fill="#fff" opacity=".22" transform="rotate(-30 242 396)"/>
+<!-- the grape that's talking: brighter, with ripples -->
+<circle cx="256" cy="252" r="62" fill="#c4ff5c" opacity=".45" filter="url(#soft)"/>
+<circle cx="256" cy="252" r="62" fill="none" stroke="#c4ff5c" stroke-width="3" opacity=".55"/>
+<circle cx="256" cy="252" r="80" fill="none" stroke="#c4ff5c" stroke-width="2" opacity=".22"/>
+<circle cx="256" cy="252" r="45" fill="url(#talk)"/>
+<ellipse cx="241" cy="235" rx="14" ry="9" fill="#fff" opacity=".45" transform="rotate(-30 241 235)"/>
+</svg>

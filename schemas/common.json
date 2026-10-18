@@ -1,0 +1,40 @@
+{
+  "description": "Types every capability shares. Lists marked x-open may gain values: an app must accept a value it doesn't know.",
+  "defs": {
+    "Timestamp": { "type": "string", "format": "date-time", "description": "ISO 8601, in UTC" },
+    "Platform": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]{1,32}$",
+      "x-open": ["kick", "twitch", "youtube"],
+      "description": "A streaming site"
+    },
+    "Channel": {
+      "type": "object",
+      "required": ["platform", "slug"],
+      "properties": {
+        "platform": { "$ref": "common:Platform" },
+        "slug": { "type": "string", "minLength": 1, "maxLength": 100, "description": "As in the channel's address" },
+        "name": { "type": "string", "maxLength": 200, "description": "As shown on the site" }
+      }
+    },
+    "Account": {
+      "type": "object",
+      "required": ["platform", "user"],
+      "description": "Who an app is signed in as: the username only, never a token or cookie",
+      "properties": {
+        "platform": { "$ref": "common:Platform" },
+        "user": { "type": "string", "minLength": 1, "maxLength": 100 }
+      }
+    },
+    "Progress": {
+      "type": "object",
+      "required": ["done", "total", "unit"],
+      "properties": {
+        "done": { "type": "number", "minimum": 0 },
+        "total": { "type": "number", "minimum": 0 },
+        "unit": { "type": "string", "x-open": ["minutes"] }
+      }
+    },
+    "Empty": { "type": "object" }
+  }
+}

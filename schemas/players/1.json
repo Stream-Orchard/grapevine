@@ -1,0 +1,43 @@
+{
+  "capability": "players",
+  "major": 1,
+  "minor": 0,
+  "description": "An app's stream players, by site: whether they're signed in, and which channels are open. Provided by Stream Multiview.",
+  "events": {
+    "players.changed": { "$ref": "#State" }
+  },
+  "methods": {
+    "players.get": { "params": { "$ref": "common:Empty" }, "result": { "$ref": "#State" } }
+  },
+  "defs": {
+    "State": {
+      "type": "object",
+      "required": ["seq", "at", "platforms"],
+      "properties": {
+        "seq": { "type": "integer", "minimum": 0 },
+        "at": { "$ref": "common:Timestamp" },
+        "platforms": {
+          "type": "object",
+          "description": "Keyed by Platform; a site with no players open may be left out",
+          "additionalProperties": { "$ref": "#Site" }
+        }
+      }
+    },
+    "Site": {
+      "type": "object",
+      "required": ["signedIn", "mode", "account", "open"],
+      "properties": {
+        "signedIn": { "type": "boolean", "description": "Whether the players play as the account right now" },
+        "mode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "x-open": ["signed-in", "signed-out", "auto"],
+          "description": "auto: signed in, except while a connected drops app is farming"
+        },
+        "account": { "anyOf": [{ "$ref": "common:Account" }, { "type": "null" }] },
+        "open": { "type": "array", "maxItems": 100, "items": { "$ref": "common:Channel" } }
+      }
+    }
+  }
+}
