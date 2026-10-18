@@ -932,30 +932,19 @@ test(
       [],
       'it answers on the older name',
     );
-    const diag = {
-      want: paths.legacyPipe(MV.slug, place),
-      current: paths.socketPath(MV.slug, place),
-      addr: mv.legacyServer?.address?.(),
-      listening: mv.legacyServer?.listening,
-      pipes: (() => {
-        try {
-          return require('fs')
-            .readdirSync('\\\\.\\pipe\\')
-            .filter((n) => /stream-multiview|pear-drops/.test(n));
-        } catch (e) {
-          return String(e);
-        }
-      })(),
-      logs,
-    };
-    const r = await raw(paths.legacyPipe(MV.slug, place)).catch((e) => {
-      throw new Error(`${e.message} ${JSON.stringify(diag)}`);
-    });
+    const r = await raw(paths.legacyPipe(MV.slug, place));
     const { auth } = await rawHello(r, { app: PD, capabilities: { 'drops.farming': { provides: ['1.0'] }, players: { uses: ['1.0'] } } });
     assert.deepEqual(auth.result, {}, 'paired over the older name');
     r.close();
     await mv.stop();
-    await assert.rejects(raw(paths.legacyPipe(MV.slug, place)), 'and stops answering on it');
+    // (raw() waits for the connection and doesn't take its error: a plain socket that says why it failed)
+    const reach = (p) =>
+      new Promise((resolve, reject) => {
+        const s = net.createConnection(p);
+        s.once('connect', () => (s.destroy(), resolve()));
+        s.once('error', reject);
+      });
+    await assert.rejects(reach(paths.legacyPipe(MV.slug, place)), 'and stops answering on it');
   }),
 );
 
