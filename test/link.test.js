@@ -8,6 +8,7 @@ const net = require('net');
 const hs = require('../src/handshake');
 const { createLink, CODES, memoryKeyStore, paths, KNOWN_APPS } = require('../src');
 const { LineReader, encode } = require('../src/framing');
+const { LOG_DATA_MAX, QUEUE_MAX } = require('../src/connection');
 const { PD, MV, FAST, tmpPlace, pair, once, until, sleep, raw } = require('./helpers');
 
 const FARMING = {
@@ -851,6 +852,99 @@ test(
 );
 
 test(
+  'the activity log: before the pairing is proven, nothing from inside a message, whatever it claims to be; data too big is left out',
+  withPlace(async ({ place }, track) => {
+    const { pd } = pair(place, { pd: { timing: { ...FAST, pingMs: 60_000 } } });
+    track(pd);
+    const log = [];
+    pd.on('message', (m) => log.push(m));
+    await pd.start();
+    const r = await raw(paths.socketPath(PD.slug, place));
+    // anything at all, before a hello
+    r.send({ jsonrpc: '2.0', method: 'players.changed', params: { note: 'x'.repeat(50_000) } });
+    r.send({ jsonrpc: '2.0', id: 7, method: `made.up.${'y'.repeat(5000)}`, params: { note: 'pearfan' } });
+    await until(() => log.filter((m) => m.dir === 'in').length === 2, 'both logged');
+    const before = log.filter((m) => m.dir === 'in');
+    assert.deepEqual(
+      before.map((m) => [m.kind, m.method, 'data' in m, 'id' in m]),
+      [
+        ['event', null, false, false],
+        ['request', null, false, false],
+      ],
+      'what it is and its size, no method name, id or data',
+    );
+    assert.ok(before[0].bytes > 50_000);
+    r.close();
+
+    log.length = 0;
+    const r2 = await raw(paths.socketPath(PD.slug, place));
+    await rawHello(r2);
+    await until(() => log.some((m) => m.dir === 'out' && m.method === 'link.subscribe'), 'connected');
+    const players = (n) => ({ ...structuredClone(PLAYERS), seq: n, at: new Date().toISOString() });
+    r2.send({ jsonrpc: '2.0', method: 'players.changed', params: players(1) });
+    const big = players(2);
+    big.platforms.kick = { ...big.platforms.kick, open: Array.from({ length: 600 }, (_, i) => ({ platform: 'kick', slug: `pixelpear${i}` })) };
+    r2.send({ jsonrpc: '2.0', method: 'players.changed', params: big });
+    await until(() => log.filter((m) => m.method === 'players.changed').length === 2, 'both events');
+    const [small, large] = log.filter((m) => m.method === 'players.changed');
+    assert.deepEqual(small.data.platforms, PLAYERS.platforms, 'a normal one has its data');
+    assert.ok(!('truncated' in small));
+    assert.ok(large.bytes > LOG_DATA_MAX && !('data' in large) && large.truncated === true, 'a big one: truncated, no data');
+    r2.close();
+  }),
+);
+
+test(
+  'while finishing the proofs, a flood from the other end closes the connection, and no key is kept',
+  withPlace(async ({ place }, track) => {
+    paths.ensureDir(place);
+    // A stand-in that answers to Stream Multiview's socket, says hello properly, then floods instead of answering the proof.
+    const server = net.createServer((socket) => {
+      const reader = new LineReader((m) => {
+        if (m.method === 'link.auth') {
+          for (let i = 0; i <= QUEUE_MAX; i++) socket.write(encode({ jsonrpc: '2.0', method: 'players.changed', params: {} }));
+          return;
+        }
+        if (m.method !== 'link.hello') return;
+        const key = hs.newKey();
+        socket.write(
+          encode({
+            jsonrpc: '2.0',
+            id: m.id,
+            result: {
+              protocol: 1,
+              app: MV,
+              capabilities: { players: { provides: ['1.0'] }, 'drops.farming': { uses: ['1.0'] } },
+              agreed: { players: '1', 'drops.farming': '1' },
+              auth: { proof: hs.proof(key, 'server', m.params.auth.nonce), nonce: hs.nonce(), key },
+            },
+          }),
+        );
+      }, () => {});
+      socket.on('data', (d) => reader.push(d));
+      socket.on('error', () => {});
+      server.closed = once(socket, 'close');
+    });
+    const sock = paths.socketPath(MV.slug, place);
+    await new Promise((res) => server.listen(sock, res));
+    const keys = memoryKeyStore();
+    const { pd } = pair(place, { pd: { keys, timing: { ...FAST, rateMax: 10_000, handshakeMs: 3000 } } });
+    track(pd);
+    try {
+      await pd.start();
+      await until(() => server.closed, 'a connection');
+      const started = Date.now();
+      await server.closed;
+      assert.ok(Date.now() - started < 1500, 'closed by the flood, not the 3 s deadline');
+      assert.equal(keys.get(MV.id), null, 'not paired');
+      assert.equal(pd.isConnected(MV.id), false);
+    } finally {
+      await new Promise((res) => server.close(res));
+    }
+  }),
+);
+
+test(
   'the activity log: what a raw client sends, kept to the rules (nothing for a line that is not JSON, a reply to nothing, and what the limit drops)',
   withPlace(async ({ place }, track) => {
     const { pd } = pair(place, { pd: { timing: { ...FAST, rateMax: 5, strikes: 5, pingMs: 60_000 } } });
@@ -908,15 +1002,15 @@ test(
       data: { channel: 'pixelpear' },
     });
 
-    // Over the limit: still reported as received, and the "slow down" too.
+    // Over the limit: not logged (nor kept), only the "slow down" each one gets.
     await sleep(1050);
     log.length = 0;
     for (let i = 0; i < 8; i++) r.send({ jsonrpc: '2.0', id: 100 + i, method: 'link.ping', params: {} });
     await until(() => log.filter((m) => m.dir === 'out').length === 8, 'eight answers');
-    assert.equal(log.filter((m) => m.dir === 'in' && m.method === 'link.ping').length, 8, 'all eight received');
+    assert.equal(log.filter((m) => m.dir === 'in' && m.method === 'link.ping').length, 5, 'the five within the limit');
     const slowDown = log.filter((m) => m.kind === 'error');
-    assert.ok(slowDown.length >= 1);
-    assert.ok(slowDown.every((m) => m.method === 'link.ping' && m.data.code === CODES.TOO_MANY && m.ms >= 0));
+    assert.equal(slowDown.length, 3);
+    assert.ok(slowDown.every((m) => m.method === null && m.data.code === CODES.TOO_MANY && !('ms' in m)));
   }),
 );
 

@@ -21,6 +21,13 @@ const INFLIGHT_MS = REQUEST_TIMEOUT_MS;
 const INFLIGHT_MAX = 1000;
 // Their messages carry nonces, proofs and pairing keys, so the activity log leaves their data out.
 const SECRET = new Set(['link.hello', 'link.auth']);
+// Before the other app has proved the pairing, anything could be on the other end: the activity log gets no
+// data from it, and only these method names (anything else is just "a message").
+const LINK_METHODS = new Set(['link.hello', 'link.auth', 'link.bye', 'link.ping']);
+// Bigger data than this goes in the activity log as `truncated: true` instead (a line can be 1 MiB).
+const LOG_DATA_MAX = 16 * 1024;
+// Messages that come while finishing the proofs wait, up to this many.
+const QUEUE_MAX = 100;
 
 /**
  * One message for the activity log (Link's 'message' event).
@@ -34,6 +41,7 @@ const SECRET = new Set(['link.hello', 'link.auth']);
  * @property {number} [ms]
  * @property {number} bytes
  * @property {any} [data]
+ * @property {boolean} [truncated] its data was too big for the log, so it's left out
  */
 
 /**
@@ -119,6 +127,7 @@ class Connection extends EventEmitter {
   /** Tells the link about one message sent or received, for its 'message' event. */
   report(dir, m, bytes) {
     if (this.state === 'closed') return;
+    if (dir === 'in' && this.state !== 'ready' && this.state !== 'authing') return this.reportUnproven(m, bytes);
     const at = Date.now();
     const isId = typeof m.id === 'number' || typeof m.id === 'string';
     /** @type {Message} */
@@ -143,6 +152,38 @@ class Connection extends EventEmitter {
       if (request && isId) this.remember(this.inflight[dir], m.id, m.method, at);
       if (!SECRET.has(m.method)) entry.data = m.params ?? {};
     } else return; // not JSON-RPC at all
+    if ('data' in entry && bytes > LOG_DATA_MAX) {
+      delete entry.data;
+      entry.truncated = true;
+    }
+    this.host.message?.(this, entry);
+  }
+
+  /**
+   * A message received before the other app has proved the pairing: what it is and its size, nothing from
+   * inside it. A reply to this app's own hello still says it's the hello's.
+   */
+  reportUnproven(m, bytes) {
+    const at = Date.now();
+    const reply = 'result' in m || 'error' in m;
+    if (!reply && typeof m.method !== 'string') return;
+    /** @type {Message} */
+    const entry = { at, app: this.peerApp(), dir: 'in', kind: reply ? ('error' in m ? 'error' : 'reply') : 'id' in m ? 'request' : 'event', method: null, bytes };
+    if (reply) {
+      const req = typeof m.id === 'number' || typeof m.id === 'string' ? this.inflight.out.get(m.id) : undefined;
+      if (req) {
+        this.inflight.out.delete(m.id);
+        entry.method = req.method;
+        entry.id = m.id;
+        entry.ms = at - req.at;
+      }
+    } else if (LINK_METHODS.has(m.method)) {
+      entry.method = m.method;
+      if ('id' in m) {
+        entry.id = m.id;
+        if (typeof m.id === 'number' || typeof m.id === 'string') this.remember(this.inflight.in, m.id, m.method, at);   // for its reply
+      }
+    }
     this.host.message?.(this, entry);
   }
 
@@ -314,13 +355,17 @@ class Connection extends EventEmitter {
 
   onMessage(m, bytes) {
     this.lastHeard = Date.now();
+    // The limit comes first: messages over it aren't logged or kept either.
+    if (!this.withinRate(m)) return;
     if (this.host.watching?.()) this.report('in', m, bytes);
+    if (this.state === 'authing' && !('result' in m || 'error' in m)) {
+      if (this.queue.length >= QUEUE_MAX) return this.close('Too many messages before the pairing was proven');
+      return void this.queue.push(m);
+    }
     this.dispatch(m);
   }
 
   dispatch(m) {
-    if (this.state === 'authing' && !('result' in m || 'error' in m)) return void this.queue.push(m);
-    if (!this.withinRate(m)) return;
     this.rpc.handle(m);
   }
 
@@ -406,4 +451,4 @@ class Connection extends EventEmitter {
   }
 }
 
-module.exports = { Connection, TIMING };
+module.exports = { Connection, TIMING, LOG_DATA_MAX, QUEUE_MAX };
