@@ -1,6 +1,9 @@
 # What's new in Grapevine
 
-## 0.7.2 (current)
+## 0.7.3 (current)
+- Records that Pear Drops 0.1.6 shipped `drops.farming@1.0` and `players@1.0`: those versions can't change in place now, and Pear Drops' first release with them is 0.1.6, for "update Pear Drops to 0.1.6 or later".
+
+## 0.7.2
 - The README starts the stand-in for launch tests from the installed package by its path, not with `npx`, which could fetch a package of that name.
 
 ## 0.7.1
