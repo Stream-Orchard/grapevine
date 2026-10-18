@@ -116,6 +116,12 @@ function checkApp(app) {
   if (app.icon !== undefined && (typeof app.icon !== 'string' || !app.icon.startsWith('data:image/png;base64,') || app.icon.length > MAX_ICON))
     p.push('app.icon: a PNG data URL, up to 256 KB');
   for (const k of ['homepage', 'download']) if (app[k] !== undefined && !isHttps(app[k])) p.push(`app.${k}: an https address`);
+  if (
+    app.formerIds !== undefined &&
+    (!Array.isArray(app.formerIds) || app.formerIds.length > 10 || !app.formerIds.every((i) => typeof i === 'string' && ID_RE.test(i) && i !== app.id))
+  ) {
+    p.push('app.formerIds: up to 10 ids it had before, not its own');
+  }
   return p;
 }
 

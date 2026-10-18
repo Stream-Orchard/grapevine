@@ -10,6 +10,7 @@ Version 1. How desktop apps on the same computer find each other, pair, and talk
 - [Errors](#errors)
 - [Capabilities](#capabilities)
 - [Versions](#versions)
+- [Renaming an app](#renaming-an-app)
 - [Compatibility](#compatibility)
 - [Security](#security)
 
@@ -31,7 +32,7 @@ Every app has a **slug** (`a-z`, `0-9` and `-`, up to 40 characters, starting wi
 - A socket left by a crash answers nothing (`ECONNREFUSED`): its app deletes it and listens again when it starts. If something does answer, another copy of the app is running, and the new copy doesn't start its link.
 - An app only listens, and only looks for others, while at least one of its Connected apps switches is on.
 
-**Who connects.** Of two apps, the one whose id sorts first (plain string order) connects; the other waits for it. So a pair never opens two connections. If they ever do, both keep the connection opened by the app whose id sorts first and close the other with `link.bye { reason: "duplicate" }`.
+**Who connects.** Of two apps, the one whose slug sorts first (plain string order) connects; the other waits for it. So a pair never opens two connections. If they ever do, both keep the connection opened by the app whose slug sorts first and close the other with `link.bye { reason: "duplicate" }`. It's the slug, not the id, because an app's id can change (see [Renaming an app](#renaming-an-app)) and its socket's name doesn't.
 
 ## Messages
 
@@ -61,6 +62,7 @@ The connecting app sends `link.hello` first:
     "protocol": { "min": 1, "max": 1 },
     "app": {
       "id": "com.glowingpear.streammultiview",
+      "formerIds": [],
       "slug": "stream-multiview",
       "name": "Stream Multiview",
       "version": "0.4.0",
@@ -79,6 +81,7 @@ The connecting app sends `link.hello` first:
 | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `protocol`                            | The range of protocol versions it speaks                                                                                                      |
 | `app.id`                              | Its install id: lowercase letters, digits, dots and dashes, like `com.example.app` (3–100 characters)                                         |
+| `app.formerIds`                       | The ids it had before a rename, up to 10. Always sent: `[]` until the app is renamed                                                          |
 | `app.slug`, `app.name`, `app.version` | Required. `summary` (up to 300 characters), `icon` (a PNG data URL, up to 256 KB), `homepage` and `download` (`https` addresses) are optional |
 | `capabilities`                        | For each capability, the versions it `provides` and `uses`, as `"major.minor"`                                                                |
 | `auth.nonce`                          | 32 random bytes, base64, new for every connection                                                                                             |
@@ -88,12 +91,13 @@ The listening app checks it, in this order:
 
 1. A hello that doesn't fit the table gets `-32602` with `data.problems` (a list of strings), and the connection closes.
 2. No protocol version in both ranges: `-32003` with `data.protocol` (its own range), and close.
-3. Its switch for that app is off: `-32005`, and close.
+3. Its switch for that app is off: `-32005`, and close. The app is known by `app.id` or any of `app.formerIds`, and the switch counts under any of them.
 4. **Pairing.**
    - `pair: true` and it has no key for that app: it makes a new 32-byte random key `K`.
    - `pair: true` but it still has a key: `-32001` with `data: { reason: "pair-again", keyHeldBy: "listener" }`, and close. It accepts a new pairing only once its user presses **Pair again**, which deletes its key.
    - `pair: false` and it has no key: `-32001` with `data: { reason: "pair-again", keyHeldBy: "connector" }`, and close. The connecting app's user presses **Pair again** there.
    - Otherwise `K` is the key it has.
+   - "Has a key" means one filed under `app.id` or any of `app.formerIds` (or a former id its own known-apps list gives that app).
 5. It replies:
 
 ```json
@@ -107,7 +111,7 @@ The listening app checks it, in this order:
 
 The connecting app checks the reply:
 
-- its `app.id` is the app it meant to connect to;
+- its `app.id`, or one of its `app.formerIds`, is the app it meant to connect to;
 - it speaks the `protocol` chosen;
 - the `proof` matches its key, or the `key` it was just given when pairing.
 
@@ -247,6 +251,16 @@ After the hello, each app tells its user one of:
 | **Can't connect**                 | No protocol version in common. Again, it names the app to update                                                                                                           |
 
 The releases come from the known-apps list (`src/known-apps.js`): `firstRelease` maps `"<capability>@<major>.<minor>"` and `"protocol@<n>"` to the first release of that app that had it.
+
+## Renaming an app
+
+An app's id can change, say from `com.glowingpear.streammultiview` to `com.streamorchard.streammultiview`. Apps paired with it under the old id carry on without pairing again:
+
+1. **The renamed app lists its old id in its hello:** `"formerIds": ["com.glowingpear.streammultiview"]`. That's the only change it needs.
+2. **Other apps find their key and their switch under any of its ids.** An app whose Grapevine predates the rename still knows it by the old id, and keeps working.
+3. **The known-apps list gets the new id,** with the old one in its own `formerIds`. An app updated to it shows the new id, finds what was saved under the old one, and can move its own settings across.
+
+Claiming a former id only says where to look for a key. The app still has to prove it holds that key, so it can't take over another app's pairing.
 
 ## Security
 

@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const net = require('net');
 const hs = require('../src/handshake');
-const { createLink, CODES, memoryKeyStore, paths } = require('../src');
+const { createLink, CODES, memoryKeyStore, paths, KNOWN_APPS } = require('../src');
 const { LineReader, encode } = require('../src/framing');
 const { PD, MV, FAST, tmpPlace, pair, once, until, sleep, raw } = require('./helpers');
 
@@ -112,7 +112,7 @@ test(
     await pd.start();
     await mv.start();
     await once(mv, 'connected');
-    const key = keys.pd.get(MV.id).key;
+    const { key } = await until(() => keys.pd.get(MV.id), 'Pear Drops to keep the key'); // it connects, so it saves the key a moment later
     const gone = once(mv, 'disconnected');
     await pd.stop();
     assert.match((await gone)[1], /Pear Drops quit/);
@@ -131,26 +131,27 @@ test(
 test(
   'the switch: an app switched off is refused and shown as Off; switching it on connects, switching off disconnects',
   withPlace(async ({ place }, track) => {
-    let pdAllows = false;
-    const { pd, mv } = pair(place, { pd: { allowed: () => pdAllows } });
+    // Pear Drops connects (its slug sorts first), and Stream Multiview's switch is off.
+    let mvAllows = false;
+    const { pd, mv } = pair(place, { mv: { allowed: () => mvAllows } });
     track(pd, mv);
     await pd.start();
     await mv.start();
-    await until(() => mv.peers()[0].reason === 'switched-off', 'Stream Multiview to be refused');
-    assert.equal(mv.peers()[0].status, 'waiting');
-    assert.equal(pd.peers()[0].status, 'off');
-    pdAllows = true;
-    pd.refresh();
-    await until(() => mv.isConnected(PD.id), 'connected once switched on');
-    const gone = once(mv, 'disconnected');
-    pdAllows = false;
-    pd.refresh();
-    assert.match((await gone)[1], /Switched off in Pear Drops/);
-    let mvAllows = true;
-    const { mv: mv2 } = pair(place, { mv: { allowed: () => mvAllows } });
-    assert.equal(mv2.peers()[0].status, 'waiting');
+    await until(() => pd.peers()[0].reason === 'switched-off', 'Pear Drops to be refused');
+    assert.equal(pd.peers()[0].status, 'waiting');
+    assert.equal(mv.peers()[0].status, 'off');
+    mvAllows = true;
+    mv.refresh();
+    await until(() => pd.isConnected(MV.id), 'connected once switched on');
+    const gone = once(pd, 'disconnected');
     mvAllows = false;
-    assert.equal(mv2.peers()[0].status, 'off');
+    mv.refresh();
+    assert.match((await gone)[1], /Switched off in Stream Multiview/);
+    let pdAllows = true;
+    const { pd: pd2 } = pair(place, { pd: { allowed: () => pdAllows } });
+    assert.equal(pd2.peers()[0].status, 'waiting');
+    pdAllows = false;
+    assert.equal(pd2.peers()[0].status, 'off', "the connecting app's own switch off: Off");
     const throwing = createLink({
       app: PD,
       allowed: () => {
@@ -215,8 +216,8 @@ test(
     mv.keys.set(PD.id, hs.newKey());
     await pd.start();
     await mv.start();
-    await until(() => mv.peers()[0].status === 'pair-again', 'a wrong proof');
-    assert.ok(!mv.isConnected(PD.id));
+    await until(() => pd.peers()[0].status === 'pair-again', 'a wrong proof');
+    assert.ok(!pd.isConnected(MV.id));
   }),
 );
 
@@ -413,7 +414,7 @@ test('createLink checks the app it describes and the versions it lists', () => {
 test(
   'the connecting app: refused, an impostor, a wrong proof, or a hung app',
   withPlace(async ({ place }, track) => {
-    // A raw "Pear Drops" that answers however each case needs.
+    // A raw "Stream Multiview" that answers however each case needs; Pear Drops connects to it.
     let behave = 'switched-off';
     const server = net.createServer((socket) => {
       const reader = new LineReader(
@@ -424,12 +425,12 @@ test(
             if (behave === 'future')
               return send({ jsonrpc: '2.0', id: m.id, error: { code: CODES.UNSUPPORTED, message: 'no', data: { protocol: { min: 5, max: 5 } } } });
             const key = hs.newKey();
-            const app = behave === 'impostor' ? { ...PD, id: 'com.someone.else' } : PD;
+            const app = behave === 'impostor' ? { ...MV, id: 'com.someone.else' } : MV;
             const proofOf = behave === 'wrong-proof' ? hs.proof(hs.newKey(), 'server', m.params.auth.nonce) : hs.proof(key, 'server', m.params.auth.nonce);
             return send({
               jsonrpc: '2.0',
               id: m.id,
-              result: { protocol: 1, app, capabilities: { 'drops.farming': { provides: ['1.0'] } }, auth: { proof: proofOf, nonce: hs.nonce(), key } },
+              result: { protocol: 1, app, capabilities: { players: { provides: ['1.0'] } }, auth: { proof: proofOf, nonce: hs.nonce(), key } },
             });
           }
           if (m.method === 'link.auth') return send({ jsonrpc: '2.0', id: m.id, result: {} });
@@ -441,27 +442,27 @@ test(
       socket.on('error', () => {});
     });
     paths.ensureDir(place);
-    await new Promise((r) => server.listen(paths.socketPath(PD.slug, place), r));
+    await new Promise((r) => server.listen(paths.socketPath(MV.slug, place), r));
     try {
-      const { mv } = pair(place);
-      track(mv);
-      await mv.start();
-      await until(() => mv.peers()[0].reason === 'switched-off', 'refused: switched off there');
+      const { pd } = pair(place);
+      track(pd);
+      await pd.start();
+      await until(() => pd.peers()[0].reason === 'switched-off', 'refused: switched off there');
       behave = 'future';
-      mv.refresh();
-      await until(() => mv.peers()[0].status === 'incompatible', 'no protocol in common');
-      assert.equal(mv.peers()[0].report.text, "Can't connect: update Stream Multiview", 'it has the older protocol');
+      pd.refresh();
+      await until(() => pd.peers()[0].status === 'incompatible', 'no protocol in common');
+      assert.equal(pd.peers()[0].report.text, "Can't connect: update Pear Drops", 'it has the older protocol');
       behave = 'wrong-proof';
-      mv.refresh();
-      await until(() => mv.peers()[0].status === 'pair-again', 'a wrong proof');
+      pd.refresh();
+      await until(() => pd.peers()[0].status === 'pair-again', 'a wrong proof');
       behave = 'impostor';
-      mv.refresh();
+      pd.refresh();
       await sleep(150);
-      assert.ok(!mv.isConnected(PD.id), 'an app with a different id is never trusted');
+      assert.ok(!pd.isConnected(MV.id), 'an app with a different id is never trusted');
       behave = 'hung';
-      mv.refresh();
-      await until(() => mv.isConnected(PD.id), 'connected');
-      const [, reason] = await once(mv, 'disconnected', 3000);
+      pd.refresh();
+      await until(() => pd.isConnected(MV.id), 'connected');
+      const [, reason] = await once(pd, 'disconnected', 3000);
       assert.match(reason, /stopped answering/);
     } finally {
       await new Promise((r) => server.close(r));
@@ -482,9 +483,97 @@ test(
     pd.pairAgain(MV.id); // the raw client paired as Stream Multiview: start afresh for the real one
     await mv.start();
     await once(mv, 'connected');
-    pd.connect({ id: MV.id, slug: MV.slug }); // Pear Drops connects too, which it normally leaves to Stream Multiview
+    mv.connect({ id: PD.id, slug: PD.slug }); // Stream Multiview connects too, which it normally leaves to Pear Drops
     await sleep(300);
     assert.equal(pd.conns.size, 1);
+    assert.equal(mv.conns.size, 1);
     assert.ok(mv.isConnected(PD.id) && pd.isConnected(MV.id), 'still connected, once');
+  }),
+);
+
+const RENAMED = 'com.streamorchard.streammultiview';
+
+test(
+  'every hello says which ids the app had before: none, until it is renamed',
+  withPlace(async ({ place }, track) => {
+    const { pd } = pair(place);
+    track(pd);
+    await pd.start();
+    const r = await raw(paths.socketPath(PD.slug, place));
+    const { res } = await rawHello(r);
+    assert.deepEqual(res.result.app.formerIds, []);
+    assert.throws(() => createLink({ app: { ...MV, formerIds: [MV.id] }, allowed: () => true }), /formerIds/, 'not its own id');
+  }),
+);
+
+test(
+  'after a rename, an app that only knows the old id still connects with the old pairing',
+  withPlace(async ({ place }, track) => {
+    const keys = { pd: memoryKeyStore(), mv: memoryKeyStore() };
+    const allowed = (id) => id === MV.id || id === PD.id; // Pear Drops' switch is saved under the old id
+    const first = pair(place, { pd: { keys: keys.pd, allowed }, mv: { keys: keys.mv } });
+    track(first.pd, first.mv);
+    await first.pd.start();
+    await first.mv.start();
+    await until(() => keys.pd.get(MV.id) && keys.mv.get(PD.id), 'paired under the old id');
+    await first.mv.stop();
+
+    // Stream Multiview comes back renamed, saying what it was. Pear Drops hasn't updated Grapevine.
+    const { mv: renamed } = pair(place, { mv: { keys: keys.mv, app: { id: RENAMED, formerIds: [MV.id] } } });
+    track(renamed);
+    await renamed.start();
+    await until(() => first.pd.isConnected(MV.id), 'connected without pairing again');
+    assert.equal(first.pd.peers()[0].status, 'connected');
+    assert.equal(first.pd.currentId(MV.id), MV.id, 'Pear Drops still knows it by the old id');
+    assert.equal(first.pd.isConnected(RENAMED), true, 'and it learned the new id from the hello');
+    const heard = once(renamed, 'event');
+    first.pd.publish('drops.farming.changed', FARMING);
+    assert.equal((await heard)[2].state, 'farming');
+  }),
+);
+
+test(
+  'after a rename, an app that knows both ids finds the old pairing and switch, and gives the new id',
+  withPlace(async ({ place }, track) => {
+    const keys = { pd: memoryKeyStore(), mv: memoryKeyStore() };
+    const allowed = (id) => id === MV.id || id === PD.id; // still saved under the old id
+    const first = pair(place, { pd: { keys: keys.pd, allowed }, mv: { keys: keys.mv } });
+    track(first.pd, first.mv);
+    await first.pd.start();
+    await first.mv.start();
+    await until(() => keys.pd.get(MV.id) && keys.mv.get(PD.id), 'paired under the old id');
+    await first.pd.stop();
+    await first.mv.stop();
+
+    // Both updated: Grapevine's list has Stream Multiview's new id, with the old one as a former id.
+    const knownApps = KNOWN_APPS.map((a) => (a.id === MV.id ? { ...a, id: RENAMED, formerIds: [MV.id] } : a));
+    const { pd, mv } = pair(place, {
+      pd: { keys: keys.pd, allowed, knownApps },
+      mv: { keys: keys.mv, knownApps, app: { id: RENAMED, formerIds: [MV.id] } },
+    });
+    track(pd, mv);
+    assert.deepEqual(
+      mv.peers().map((p) => p.name),
+      ['Pear Drops'],
+      'its own old entry is not another app',
+    );
+    const [card] = pd.peers();
+    assert.equal(card.id, RENAMED);
+    assert.deepEqual(card.formerIds, [MV.id]);
+    assert.equal(card.enabled, true, 'the switch saved under the old id still counts');
+    assert.ok(card.pairedAt, 'and so does the key');
+    await pd.start();
+    await mv.start();
+    await until(() => pd.isConnected(RENAMED), 'connected without pairing again');
+    assert.equal(pd.currentId(MV.id), RENAMED, 'the id to move its own settings to');
+    assert.equal(pd.isConnected(MV.id), true, 'asking by the old id still works');
+    assert.equal(mv.isConnected(PD.id), true);
+    const players = once(pd, 'event');
+    mv.publish('players.changed', PLAYERS);
+    assert.equal((await players)[1], 'players.changed');
+    assert.equal((await mv.request(PD.id, 'drops.farming.get').catch((e) => e)).code, CODES.METHOD_NOT_FOUND, 'requests work across the rename');
+    await pd.disconnect(MV.id); // by the old id
+    assert.equal(keys.pd.get(MV.id), null, 'every id is forgotten');
+    assert.equal(keys.pd.get(RENAMED), null);
   }),
 );
