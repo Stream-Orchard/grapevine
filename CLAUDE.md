@@ -4,7 +4,7 @@ The npm package `@streamorchard/grapevine`: lets desktop apps on the same comput
 
 ## Working on a change
 
-- Changes go on a branch and end as a pull request; never commit to `main`. Releases are a pull request that changes `version` in `package.json` and adds a `CHANGELOG.md` section, then a GitHub release `v<version>` (the Publish workflow stages it on npm, and a maintainer approves it on npmjs.com). Don't change the version otherwise.
+- Changes go on a branch and end as a pull request; never commit to `main`. Releases are a pull request that changes `version` in `package.json` and adds a `CHANGELOG.md` section, then a GitHub release `v<version>` (the Publish workflow publishes it to npm). Don't change the version otherwise.
 - Tests: `npm test`, `npm run test:coverage` (minimums: 90% lines, 80% branches, 90% functions), `npm run lint`, `npm run check`. Add tests next to similar ones for every new code path; `test/<file>.test.js` follows `src/<file>.js`, and `test/link.test.js` runs real sockets.
 - It must work on Windows, macOS and Linux (CI runs all three). Paths go through `src/paths.js`.
 - No runtime dependencies. Dev dependencies only for linting, formatting and type checks.
