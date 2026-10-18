@@ -143,6 +143,33 @@ Three calls go with buttons on the card:
 - **Disconnect:** `link.disconnect(appId)`. Turn your own switch for that app off too.
 - **Pair again:** `link.pairAgain(appId)`.
 
+### An activity log
+
+`link.on('message', …)` hears every message your app sends to or receives from another app, the hello included, so a page can show what goes between them. Nothing is worked out for it until something listens.
+
+| Field    |                                                                                                                  |
+| -------- | ---------------------------------------------------------------------------------------------------------------- |
+| `at`     | When it was sent or received (`Date.now()`)                                                                      |
+| `app`    | The other app's id, as your app knows it. `null` until its hello arrives (when the other app connected to yours) |
+| `dir`    | `out` (sent) or `in` (received)                                                                                  |
+| `kind`   | `request`, `reply`, `error` (a reply with an error) or `event`                                                   |
+| `method` | The method. For a reply or error, the method of the request it answers (`null` if that isn't known)              |
+| `id`     | The JSON-RPC id, for requests, replies and errors                                                                |
+| `ms`     | Replies and errors: how long since the request. Received, the round trip; sent, how long your app took to answer |
+| `bytes`  | Its size on the wire                                                                                             |
+| `data`   | The params of a request or event, the result of a reply, or `{ code, message }` of an error                      |
+
+`link.hello` and `link.auth` and their replies have no `data`: they carry the nonces, proofs and pairing keys. Nor does a reply to a request that isn't known, before the two have finished saying hello, in case it's one of those.
+
+```js
+link.on('message', (m) => {
+  // "in  event drops.farming.changed from com.streamorchard.peardrops (1290 bytes)"
+  // "out reply players.get to com.streamorchard.peardrops in 2 ms"
+  const time = m.ms === undefined ? '' : ` in ${m.ms} ms`;
+  activity.push(`${m.dir.padEnd(3)} ${m.kind} ${m.method ?? '?'} ${m.dir === 'in' ? 'from' : 'to'} ${m.app ?? 'an app'}${time} (${m.bytes} bytes)`);
+});
+```
+
 ### In your app's tests
 
 A stand-in plays the other app, at any version, so your tests don't need it installed:
