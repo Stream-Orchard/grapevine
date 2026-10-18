@@ -90,7 +90,7 @@ class Link extends EventEmitter {
     await this.listen();
     this.running = true;
     const platform = this.place.platform ?? process.platform;
-    if (platform === 'win32') this.listenLegacy();
+    if (platform === 'win32') await this.listenLegacy();
     if (platform !== 'win32') {
       try {
         this.watcher = fs.watch(paths.socketDir(this.place), () => this.pollSoon());
@@ -141,12 +141,17 @@ class Link extends EventEmitter {
   /**
    * Windows: answers on the pipe name an older Grapevine uses too, so a copy of the other app that has one
    * still finds this one. Only if that name is free: someone else holding it changes nothing here.
+   * Resolves once it's answering there (or couldn't), so start() only returns when both names are.
    */
   listenLegacy() {
     const server = net.createServer((socket) => this.accept(socket));
-    server.on('error', () => {});
-    server.listen(paths.legacyPipe(this.self.slug, this.place), () => {
-      this.legacyServer = server;
+    this.legacyServer = server; // kept at once, so a stop() straight after still closes it
+    return new Promise((resolve) => {
+      server.once('error', () => {
+        if (this.legacyServer === server) this.legacyServer = null;
+        resolve();
+      });
+      server.listen(paths.legacyPipe(this.self.slug, this.place), () => resolve());
     });
   }
 
