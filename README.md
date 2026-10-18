@@ -155,7 +155,8 @@ CI runs the tests on Windows, macOS and Linux, and lint, types and coverage on L
 
 1. In a pull request, change `version` in `package.json` and add a section to `CHANGELOG.md`.
 2. Once it's merged, publish a GitHub release tagged `v<version>`.
-3. The **Publish** workflow tests it and publishes it to npm, with provenance. No npm token is stored anywhere.
+3. The **Publish** workflow tests it and stages it on npm, with provenance. No npm token is stored anywhere, and the workflow can only stage.
+4. Approve the staged version on npmjs.com (with your two-factor code) to make it live.
 
 ## License
 
