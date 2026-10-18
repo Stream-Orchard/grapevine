@@ -33,17 +33,24 @@ test('sockets: one per app in the folder, a short /tmp folder when paths would b
   assert.throws(() => paths.socketPath('Bad Slug'), /valid app slug/);
 });
 
-test('listing finds every app with a socket, and ignores anything else', () => {
-  const { place, cleanup } = tmpPlace();
-  try {
-    assert.deepEqual(paths.listSlugs(place), [], 'no folder yet');
-    paths.ensureDir(place);
-    const dir = paths.socketDir(place);
-    for (const f of ['pear-drops.sock', 'stream-multiview.sock', 'notes.txt', 'Bad Name.sock']) fs.writeFileSync(path.join(dir, f), '');
-    assert.deepEqual(paths.listSlugs(place).sort(), ['pear-drops', 'stream-multiview']);
-  } finally {
-    cleanup();
-  }
+test(
+  'listing finds every app with a socket, and ignores anything else',
+  { skip: process.platform === 'win32' && 'Windows lists pipes, not a folder (the next test)' },
+  () => {
+    const { place, cleanup } = tmpPlace();
+    try {
+      assert.deepEqual(paths.listSlugs(place), [], 'no folder yet');
+      paths.ensureDir(place);
+      const dir = paths.socketDir(place);
+      for (const f of ['pear-drops.sock', 'stream-multiview.sock', 'notes.txt', 'Bad Name.sock']) fs.writeFileSync(path.join(dir, f), '');
+      assert.deepEqual(paths.listSlugs(place).sort(), ['pear-drops', 'stream-multiview']);
+    } finally {
+      cleanup();
+    }
+  },
+);
+
+test('on Windows, listing finds the pipes with this folder’s tag', () => {
   const fakeFs = { readdirSync: () => ['grapevine-00000000-x', `grapevine-${paths.tagOf('c:\\a')}-pear-drops`, 'other-pipe'] };
   assert.deepEqual(paths.listSlugs({ platform: 'win32', env: { GRAPEVINE_DIR: 'C:\\a' } }, fakeFs), ['pear-drops'], 'Windows: pipes with this folder’s tag');
 });
