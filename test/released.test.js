@@ -44,3 +44,20 @@ test('the known-apps list takes each app’s first releases from the record', ()
   const { KNOWN_APPS } = require('../src/known-apps');
   for (const app of KNOWN_APPS) assert.deepEqual(app.firstRelease, released.firstRelease[app.id] ?? {});
 });
+
+test('recording the versions a release declared: only the version it shipped is fixed', () => {
+  const schemas = { 'a@1': { capability: 'a', major: 1, minor: 2, x: 1 }, 'b@1': { capability: 'b', major: 1, minor: 0 } };
+  const app = { id: 'com.example.app', provides: ['a'], uses: ['b'] };
+  const r = record({ schemas: {}, firstRelease: {} }, app, '1.0.0', schemas, 1, ['a@1.2', 'b@1.0']);
+  assert.deepEqual(Object.keys(r.schemas).sort(), ['a@1', 'b@1']);
+  assert.deepEqual(r.firstRelease['com.example.app'], { 'a@1.2': '1.0.0', 'b@1.0': '1.0.0', 'protocol@1': '1.0.0' });
+  // An older release of 1.1, recorded after 1.2 was: no fingerprint (the file is 1.2 now), and 1.2's stays.
+  const older = record(r, app, '0.9.0', schemas, 1, ['a@1.1']);
+  assert.equal(older.schemas['a@1'].minor, 2);
+  assert.equal(older.firstRelease['com.example.app']['a@1.1'], '0.9.0');
+  const fresh = record({ schemas: {}, firstRelease: {} }, app, '0.9.0', schemas, 1, ['a@1.1']);
+  assert.equal(fresh.schemas['a@1'], undefined, "1.1's own file is gone: nothing to fingerprint");
+  assert.throws(() => record(r, app, '1.1.0', schemas, 1, ['a@1.3']), /only has a 1\.2/);
+  assert.throws(() => record(r, app, '1.1.0', schemas, 1, ['a@2.0']), /no schema for 2/);
+  assert.throws(() => record(r, app, '1.1.0', schemas, 1, ['a-one']), /isn't capability@major\.minor/);
+});

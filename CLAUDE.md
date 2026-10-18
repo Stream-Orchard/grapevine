@@ -26,6 +26,8 @@ The npm package `@streamorchard/grapevine`: lets desktop apps on the same comput
   - the protocol number changes only for a break in the wire format, the hello or `link.*`
 - **A version in `schemas/released.json` has shipped in an app and can't change in place.** `test/released.test.js` checks it. A version not listed there can still be edited.
 - **Record each app release that uses Grapevine with `npm run released`** (the `app-shipped` skill). It also fills in each known app's `firstRelease`.
+  - Apps declare what they speak in their `package.json`'s `grapevine` field.
+  - Their `start-change` runs `npx grapevine-check` (`scripts/check-shipped.js`), which prints the command for any release not yet recorded.
 - **A new app goes in `src/known-apps.js`:** its logo in `assets/apps/`, and the capabilities it `provides` and `uses`.
 - **Never send logins, tokens or cookies in a capability:** usernames at most. Pictures are `https` addresses.
 - **Apps on the other end:** Pear Drops (`Stream-Orchard/pear-drops`) and Stream Multiview (`GlowingPear/stream-window-multiview`). A capability change usually needs a follow-up there; say so in the pull request.
