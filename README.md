@@ -53,12 +53,29 @@ const link = createLink({
 
 await link.start();
 
-// Tell every app that subscribed. seq and at are added for you.
+// Tell every app that subscribed. seq and at are added for you, and the last one also answers
+// drops.farming.get. Everything past progress is optional: it's what a widget would show.
 link.publish('drops.farming.changed', {
   state: 'farming',
   account: { platform: 'kick', user: 'pearfan' },
-  channel: { platform: 'kick', slug: 'pixelpear' },
-  drop: null,
+  channel: { platform: 'kick', slug: 'pixelpear', name: 'PixelPear', avatar: 'https://files.kick.com/…/pixelpear.webp' },
+  stream: { title: 'Neon Rush ranked, chill vibes', viewers: 1240 },
+  drop: {
+    campaign: 'Neon Rush Launch Week',
+    category: 'Neon Rush',
+    progress: { done: 48, total: 120, unit: 'minutes' },
+    image: 'https://files.kick.com/…/neon-rush.webp',
+    endsAt: '2026-10-21T18:00:00Z',
+    rewards: { claimed: 1, total: 3 },
+    next: { name: 'Hype Rocket Emote', required: 60, unlocksAt: '2026-10-18T09:24:00Z' },
+    doneAt: '2026-10-18T10:24:00Z',
+  },
+});
+
+// A click on another app's widget asks to see Pear Drops.
+link.handle('drops.farming.show', () => {
+  mainWindow.show();
+  return { shown: true };
 });
 
 // Hear what the other apps provide.
@@ -68,6 +85,10 @@ link.on('event', (fromAppId, name, params) => {
 
 // Ask one of them something.
 const players = await link.request('com.glowingpear.streammultiview', 'players.get');
+
+// On the other side, an app showing a farming widget (Stream Multiview, say):
+//   link.on('event', (from, name, f) => name === 'drops.farming.changed' && drawWidget(f));
+//   widget.onclick = () => link.request('com.streamorchard.peardrops', 'drops.farming.show');
 
 // When a Connected apps switch changes:
 link.refresh();
@@ -123,10 +144,10 @@ Example messages for every capability version, good and bad, are in `@streamorch
 
 ## Capabilities
 
-| Capability          | Provided by      | What it says                                                       |
-| ------------------- | ---------------- | ------------------------------------------------------------------ |
-| `drops.farming` 1.0 | Pear Drops       | Whether it's farming, which channel, and the drop's progress       |
-| `players` 1.0       | Stream Multiview | Its players by site: signed in or not, and which channels are open |
+| Capability          | Provided by      | What it says                                                                                                                                                               |
+| ------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `drops.farming` 1.0 | Pear Drops       | Whether it's farming: the channel, stream and drop, with pictures, the next reward and when it unlocks, enough for a widget. Also `show`, to bring Pear Drops to the front |
+| `players` 1.0       | Stream Multiview | Its players by site: signed in or not, and which channels are open                                                                                                         |
 
 To add one:
 

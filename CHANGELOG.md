@@ -1,6 +1,10 @@
 # What's new in Grapevine
 
-## 0.2.0 (current)
+## 0.3.0 (current)
+- `drops.farming` carries enough for another app to show it, in a top-bar widget say: the channel's picture, the stream's title and viewers, and the drop's picture, end, rewards claimed, the next reward and when it unlocks. All of them are optional.
+- `drops.farming.show` asks the drops app to bring its window to the front.
+
+## 0.2.0
 - An app can be renamed: its hello lists the ids it had before (`formerIds`, `[]` until then), and apps paired with it carry on without pairing again. `link.currentId()` gives an app's new id from an old one.
 - Of two apps, the one whose slug sorts first connects (it was the id), so a rename never changes which one connects.
 

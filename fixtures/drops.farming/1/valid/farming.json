@@ -5,7 +5,22 @@
     "at": "2026-10-18T09:12:04.120Z",
     "state": "farming",
     "account": { "platform": "kick", "user": "pearfan" },
-    "channel": { "platform": "kick", "slug": "pixelpear", "name": "PixelPear" },
-    "drop": { "campaign": "Neon Rush Launch Week", "category": "Neon Rush", "progress": { "done": 48, "total": 120, "unit": "minutes" } }
+    "channel": { "platform": "kick", "slug": "pixelpear", "name": "PixelPear", "avatar": "https://files.kick.com/images/user/1/profile_image/pixelpear.webp" },
+    "stream": { "title": "Neon Rush ranked, chill vibes", "viewers": 1240 },
+    "drop": {
+      "campaign": "Neon Rush Launch Week",
+      "category": "Neon Rush",
+      "progress": { "done": 48, "total": 120, "unit": "minutes" },
+      "image": "https://files.kick.com/images/subcategories/1/banner/neon-rush.webp",
+      "endsAt": "2026-10-21T18:00:00Z",
+      "doneAt": "2026-10-18T10:24:00Z",
+      "rewards": { "claimed": 1, "total": 3 },
+      "next": {
+        "name": "Hype Rocket Emote",
+        "image": "https://files.kick.com/drops/reward/hype-rocket.png",
+        "required": 60,
+        "unlocksAt": "2026-10-18T09:24:00Z"
+      }
+    }
   }
 }
