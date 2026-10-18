@@ -1,6 +1,12 @@
 # What's new in Grapevine
 
-## 0.8.1 (current)
+## 0.9.0 (current)
+- `confirmPairing`, an opt-in option: a first pairing waits until the user presses Allow (`link.allowPairing(appId)`, for two minutes; Pair again counts as Allow). Until then the card's status is `confirm`, with who is asking, and the other app's card says to allow it there (`confirm-there`). Off by default; older apps just retry.
+- The activity log (`link.on('message')`) shows nothing from inside a message until the other app has proven the pairing (only its kind and size, and the `link.*` handshake's names), leaves out data over 16 KB (`truncated: true`), and skips what the rate limit drops. At most 100 messages wait while the proof finishes.
+- Windows: pipe names include a random secret only this user can read, so another user of the computer can't work one out and take it first. Apps also answer on, and look for, the older name, so copies with an older Grapevine still find them.
+- macOS and Linux: a link isn't taken for the socket folder.
+
+## 0.8.1
 - Records that Stream Multiview 0.3.11 shipped `drops.farming@1.0` and `players@1.0`: those versions can't change in place now, and Stream Multiview's first release with them is 0.3.11, for "update Stream Multiview to 0.3.11 or later".
 
 ## 0.8.0
