@@ -157,10 +157,22 @@ peer.link.on('event', (from, name, params) => {
 
 Give your app the same `GRAPEVINE_DIR` (or `place: { env: { GRAPEVINE_DIR: testDir } }`), so tests never touch the real folder.
 
-From the command line, for launch tests, it prints a JSON line for everything that happens and takes commands on stdin:
+As a process of its own, for launch tests, it prints a JSON line for everything that happens and takes commands on stdin:
 
-```sh
-npx grapevine-stand-in --as com.glowingpear.streammultiview --dir /tmp/test --uses drops.farming@1.0 --provides players@1.0
+```js
+// The installed copy, by its path: never `npx grapevine-stand-in`, which would fetch a package of
+// that name from npm if Grapevine weren't installed.
+const child = spawn(process.execPath, [
+  require.resolve('@streamorchard/grapevine/stand-in-peer'),
+  '--as',
+  'com.glowingpear.streammultiview',
+  '--dir',
+  testDir,
+  '--uses',
+  'drops.farming@1.0',
+  '--provides',
+  'players@1.0',
+]);
 ```
 
 Example messages for every capability version, good and bad, are in `@streamorchard/grapevine/fixtures`. Check that what your app sends passes them.
