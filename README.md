@@ -66,7 +66,15 @@ link.publish('drops.farming.changed', {
     progress: { done: 48, total: 120, unit: 'minutes' },
     image: 'https://files.kick.com/…/neon-rush.webp',
     endsAt: '2026-10-21T18:00:00Z',
-    rewards: { claimed: 1, total: 3 },
+    rewards: {
+      claimed: 1,
+      total: 3,
+      items: [
+        { name: 'Pear Badge', required: 30, state: 'claimed' },
+        { name: 'Hype Rocket Emote', required: 60, state: 'locked', unlocksAt: '2026-10-18T09:24:00Z' },
+        { name: 'Neon Crown', required: 120, state: 'locked', unlocksAt: '2026-10-18T10:24:00Z' },
+      ],
+    },
     next: { name: 'Hype Rocket Emote', required: 60, unlocksAt: '2026-10-18T09:24:00Z' },
     doneAt: '2026-10-18T10:24:00Z',
   },
@@ -144,10 +152,10 @@ Example messages for every capability version, good and bad, are in `@streamorch
 
 ## Capabilities
 
-| Capability          | Provided by      | What it says                                                                                                                                                               |
-| ------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `drops.farming` 1.0 | Pear Drops       | Whether it's farming: the channel, stream and drop, with pictures, the next reward and when it unlocks, enough for a widget. Also `show`, to bring Pear Drops to the front |
-| `players` 1.0       | Stream Multiview | Its players by site: signed in or not, and which channels are open                                                                                                         |
+| Capability          | Provided by      | What it says                                                                                                                                                                       |
+| ------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `drops.farming` 1.0 | Pear Drops       | Whether it's farming: the channel, stream and drop, with pictures and every reward's state and when it unlocks, enough for a widget. Also `show`, to bring Pear Drops to the front |
+| `players` 1.0       | Stream Multiview | Its players by site: signed in or not, and which channels are open                                                                                                                 |
 
 To add one:
 

@@ -1,6 +1,9 @@
 # What's new in Grapevine
 
-## 0.3.0 (current)
+## 0.4.0 (current)
+- `drops.farming`'s `drop.rewards` can list every reward of the drop, with its picture, the minutes it unlocks at, whether it's claimed, ready or locked, and when a locked one should unlock. Enough for a widget to draw the reward track.
+
+## 0.3.0
 - `drops.farming` carries enough for another app to show it, in a top-bar widget say: the channel's picture, the stream's title and viewers, and the drop's picture, end, rewards claimed, the next reward and when it unlocks. All of them are optional.
 - `drops.farming.show` asks the drops app to bring its window to the front.
 

@@ -14,7 +14,21 @@
       "image": "https://files.kick.com/images/subcategories/1/banner/neon-rush.webp",
       "endsAt": "2026-10-21T18:00:00Z",
       "doneAt": "2026-10-18T10:24:00Z",
-      "rewards": { "claimed": 1, "total": 3 },
+      "rewards": {
+        "claimed": 1,
+        "total": 3,
+        "items": [
+          { "name": "Pear Badge", "image": "https://files.kick.com/drops/reward/pear-badge.png", "required": 30, "state": "claimed" },
+          {
+            "name": "Hype Rocket Emote",
+            "image": "https://files.kick.com/drops/reward/hype-rocket.png",
+            "required": 60,
+            "state": "locked",
+            "unlocksAt": "2026-10-18T09:24:00Z"
+          },
+          { "name": "Neon Crown", "required": 120, "state": "locked", "unlocksAt": "2026-10-18T10:24:00Z" }
+        ]
+      },
       "next": {
         "name": "Hype Rocket Emote",
         "image": "https://files.kick.com/drops/reward/hype-rocket.png",

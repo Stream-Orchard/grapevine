@@ -121,6 +121,14 @@
                     "total": {
                       "type": "integer",
                       "minimum": 0
+                    },
+                    "items": {
+                      "type": "array",
+                      "maxItems": 20,
+                      "items": {
+                        "$ref": "#Reward"
+                      },
+                      "description": "Every reward of the drop, in the order they unlock"
                     }
                   }
                 },
@@ -188,6 +196,42 @@
             }
           ],
           "description": "The stream being watched, while farming: its title and viewers"
+        }
+      }
+    },
+    "Reward": {
+      "type": "object",
+      "required": ["name", "required", "state"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "image": {
+          "$ref": "common:Image"
+        },
+        "required": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Minutes of watching it unlocks at"
+        },
+        "state": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "x-open": ["claimed", "ready", "locked"],
+          "description": "ready: unlocked, waiting to be claimed"
+        },
+        "unlocksAt": {
+          "anyOf": [
+            {
+              "$ref": "common:Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "For a locked one: when it should unlock, at the current rate"
         }
       }
     }
