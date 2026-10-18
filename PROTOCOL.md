@@ -25,10 +25,11 @@ Every app has a **slug** (`a-z`, `0-9` and `-`, up to 40 characters, starting wi
 | Windows | `%APPDATA%\Grapevine`                                                  | the named pipe `\\.\pipe\grapevine-<tag>-<slug>` |
 
 - `GRAPEVINE_DIR` replaces the shared folder (tests, developer copies).
-- `<tag>` is the first 8 hex digits of the SHA-256 of the shared folder's path in lowercase. Pipes are visible to every user of a Windows computer; the tag keeps each user's (and each test folder's) apart.
-- If `<folder>/<a 40-character slug>.sock` would be over 100 bytes (macOS allows 104 for a socket path), the sockets go in `/tmp/grapevine-<uid>-<tag>/` instead.
-- The folder is created with mode `0700`, and an app refuses one owned by another user. Sockets are set to `0600`.
-- An app finds the others by listing the folder (on Windows, the pipes with its `grapevine-<tag>-` prefix). It watches the folder for changes and lists it again every 5 seconds as well.
+- Windows: `<tag>` is the first 16 hex digits of the SHA-256 of the shared folder's path in lowercase, a newline, and the folder's `pipe-secret`: 32 random hex digits in the file of that name, made by the first app that needs it (with `wx`, so two apps starting at once share one). Pipes are visible to every user of a Windows computer, but another user can't read the folder, so they can't work a name out before it exists and take it first.
+  - **Older names:** before this, `<tag>` was the first 8 hex digits of the SHA-256 of the folder's path alone. An app also listens on that name when it's free, and looks for an app under it when that app has no pipe with the new name, so copies with an older Grapevine still find each other. These go in the next protocol version.
+- If `<folder>/<a 40-character slug>.sock` would be over 100 bytes (macOS allows 104 for a socket path), the sockets go in `/tmp/grapevine-<uid>-<8-digit tag of the folder's path>/` instead.
+- The folder is created with mode `0700`, and an app refuses one owned by another user, or a link (in `/tmp`, another user could make either first). Sockets are set to `0600`.
+- An app finds the others by listing the folder (on Windows, the pipes with its `grapevine-<tag>-` prefix, and the older one). It watches the folder for changes and lists it again every 5 seconds as well.
 - A socket left by a crash answers nothing (`ECONNREFUSED`): its app deletes it and listens again when it starts. If something does answer, another copy of the app is running, and the new copy doesn't start its link.
 - An app only listens, and only looks for others, while at least one of its Connected apps switches is on.
 
@@ -279,7 +280,7 @@ Claiming a former id only says where to look for a key. The app still has to pro
 
 **Who can connect:**
 
-- **Only programs running as the same user.** The folder and sockets are private to them. Windows pipes are named per user, but any user of the computer can open one; pairing covers that.
+- **Only programs running as the same user.** The folder and sockets are private to them. Windows pipes are named with a secret only that user can read, so another user can't take a name first; one that's in use is listed for every user, and pairing covers someone else opening it. If another user takes the name of an app that isn't running (they can see it while it is), that app can't start its link (`EADDRINUSE`): it doesn't share one.
 - **Never a web page.** Browsers can't open local sockets or named pipes at all.
 - **Never another computer.** Nothing listens on the network.
 

@@ -31,6 +31,55 @@ function tagOf(dir) {
   return crypto.createHash('sha256').update(dir.toLowerCase()).digest('hex').slice(0, 8);
 }
 
+const SECRET_FILE = 'pipe-secret';
+const SECRET_RE = /^[0-9a-f]{32}$/;
+/**
+ * Windows: a random secret in the shared folder (in the user's own %APPDATA%, which other users can't read),
+ * made by the first app that needs it. It goes into the pipes' names, so another user of the computer
+ * can't work them out ahead of time and take one first.
+ */
+function pipeSecret(place = {}, fsImpl = fs) {
+  const dir = linkDir(place);
+  const file = path.join(dir, SECRET_FILE);
+  const read = () => {
+    try {
+      const s = String(fsImpl.readFileSync(file, 'utf8')).trim();
+      return SECRET_RE.test(s) ? s : null;
+    } catch {
+      return null;
+    }
+  };
+  const have = read();
+  if (have) return have;
+  fsImpl.mkdirSync(dir, { recursive: true });
+  const fresh = crypto.randomBytes(16).toString('hex');
+  try {
+    fsImpl.writeFileSync(file, fresh, { flag: 'wx', mode: 0o600 });
+    return fresh;
+  } catch (err) {
+    if (/** @type {NodeJS.ErrnoException} */ (err).code !== 'EEXIST') throw err;
+  }
+  const theirs = read(); // another app made it at the same moment
+  if (theirs) return theirs;
+  fsImpl.writeFileSync(file, fresh, { mode: 0o600 }); // there, but not a secret: replaced
+  return fresh;
+}
+
+/** The tag in Windows pipe names: the folder and its secret. */
+function pipeTag(place = {}, fsImpl = fs) {
+  return crypto
+    .createHash('sha256')
+    .update(`${linkDir(place).toLowerCase()}\n${pipeSecret(place, fsImpl)}`)
+    .digest('hex')
+    .slice(0, 16);
+}
+const PIPES = '\\\\.\\pipe\\';
+/** Windows: the name copies with an older Grapevine use (the folder's tag only), which apps still answer and look for. */
+function legacyPipe(slug, place = {}) {
+  if (!SLUG_RE.test(slug)) throw new Error(`"${slug}" isn't a valid app slug (a-z, 0-9 and -, up to 40)`);
+  return `${PIPES}grapevine-${tagOf(linkDir(place))}-${slug}`;
+}
+
 /** The folder the sockets are actually in: the shared folder, or a short one in /tmp if its paths would be too long. */
 function socketDir(place = {}) {
   const dir = linkDir(place);
@@ -41,11 +90,25 @@ function socketDir(place = {}) {
 }
 
 /** The socket (or pipe) an app listens on. */
-function socketPath(slug, place = {}) {
+function socketPath(slug, place = {}, fsImpl = fs) {
   if (!SLUG_RE.test(slug)) throw new Error(`"${slug}" isn't a valid app slug (a-z, 0-9 and -, up to 40)`);
   const { platform = process.platform } = place;
-  if (platform === 'win32') return `\\\\.\\pipe\\grapevine-${tagOf(linkDir(place))}-${slug}`;
+  if (platform === 'win32') return `${PIPES}grapevine-${pipeTag(place, fsImpl)}-${slug}`;
   return path.join(socketDir(place), `${slug}.sock`);
+}
+
+/** Where to reach an app that's running: its socket; on Windows its pipe, or the older name if that's all it has. */
+function findSocket(slug, place = {}, fsImpl = fs) {
+  const { platform = process.platform } = place;
+  if (platform !== 'win32') return socketPath(slug, place, fsImpl);
+  const current = socketPath(slug, place, fsImpl),
+    legacy = legacyPipe(slug, place);
+  let names = [];
+  try {
+    names = fsImpl.readdirSync(PIPES);
+  } catch {}
+  const listed = (p) => names.includes(p.slice(PIPES.length));
+  return listed(current) || !listed(legacy) ? current : legacy;
 }
 
 /** The slugs of every app with a socket in the folder right now (running, or left behind by a crash). */
@@ -53,12 +116,13 @@ function listSlugs(place = {}, fsImpl = fs) {
   const { platform = process.platform } = place;
   try {
     if (platform === 'win32') {
-      const prefix = `grapevine-${tagOf(linkDir(place))}-`;
-      return fsImpl
-        .readdirSync('\\\\.\\pipe\\')
-        .filter((n) => n.startsWith(prefix))
-        .map((n) => n.slice(prefix.length))
-        .filter((s) => SLUG_RE.test(s));
+      const prefixes = [`grapevine-${pipeTag(place, fsImpl)}-`, `grapevine-${tagOf(linkDir(place))}-`];
+      const slugs = new Set();
+      for (const n of fsImpl.readdirSync(PIPES)) {
+        const prefix = prefixes.find((x) => n.startsWith(x));
+        if (prefix && SLUG_RE.test(n.slice(prefix.length))) slugs.add(n.slice(prefix.length));
+      }
+      return [...slugs];
     }
     return fsImpl
       .readdirSync(socketDir(place))
@@ -70,16 +134,20 @@ function listSlugs(place = {}, fsImpl = fs) {
   }
 }
 
-/** Creates the socket folder, private to this user. Refuses one owned by someone else. */
+/**
+ * Creates the socket folder, private to this user. Refuses one owned by someone else, or a link (in /tmp,
+ * another user could have made either first). Windows: the shared folder, for the pipes' secret.
+ */
 function ensureDir(place = {}, fsImpl = fs) {
   const { platform = process.platform } = place;
-  if (platform === 'win32') return; // pipes don't live in a folder
+  if (platform === 'win32') return void pipeSecret(place, fsImpl);
   const dir = socketDir(place);
   fsImpl.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const uid = place.uid ?? process.getuid?.();
-  const st = fsImpl.statSync(dir);
+  const st = fsImpl.lstatSync(dir);
+  if (st.isSymbolicLink() || !st.isDirectory()) throw new Error(`${dir} isn't a folder`);
   if (uid !== undefined && st.uid !== uid) throw new Error(`${dir} belongs to another user`);
   if ((st.mode & 0o077) !== 0) fsImpl.chmodSync(dir, 0o700);
 }
 
-module.exports = { SLUG_RE, MAX_SOCKET_PATH, linkDir, tagOf, socketDir, socketPath, listSlugs, ensureDir };
+module.exports = { SLUG_RE, MAX_SOCKET_PATH, linkDir, tagOf, pipeSecret, pipeTag, legacyPipe, socketDir, socketPath, findSocket, listSlugs, ensureDir };

@@ -168,7 +168,14 @@ class Connection extends EventEmitter {
     const reply = 'result' in m || 'error' in m;
     if (!reply && typeof m.method !== 'string') return;
     /** @type {Message} */
-    const entry = { at, app: this.peerApp(), dir: 'in', kind: reply ? ('error' in m ? 'error' : 'reply') : 'id' in m ? 'request' : 'event', method: null, bytes };
+    const entry = {
+      at,
+      app: this.peerApp(),
+      dir: 'in',
+      kind: reply ? ('error' in m ? 'error' : 'reply') : 'id' in m ? 'request' : 'event',
+      method: null,
+      bytes,
+    };
     if (reply) {
       const req = typeof m.id === 'number' || typeof m.id === 'string' ? this.inflight.out.get(m.id) : undefined;
       if (req) {
@@ -181,7 +188,7 @@ class Connection extends EventEmitter {
       entry.method = m.method;
       if ('id' in m) {
         entry.id = m.id;
-        if (typeof m.id === 'number' || typeof m.id === 'string') this.remember(this.inflight.in, m.id, m.method, at);   // for its reply
+        if (typeof m.id === 'number' || typeof m.id === 'string') this.remember(this.inflight.in, m.id, m.method, at); // for its reply
       }
     }
     this.host.message?.(this, entry);

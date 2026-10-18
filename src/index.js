@@ -82,6 +82,7 @@ class Link extends EventEmitter {
     await this.listen();
     this.running = true;
     const platform = this.place.platform ?? process.platform;
+    if (platform === 'win32') this.listenLegacy();
     if (platform !== 'win32') {
       try {
         this.watcher = fs.watch(paths.socketDir(this.place), () => this.pollSoon());
@@ -129,6 +130,18 @@ class Link extends EventEmitter {
     });
   }
 
+  /**
+   * Windows: answers on the pipe name an older Grapevine uses too, so a copy of the other app that has one
+   * still finds this one. Only if that name is free: someone else holding it changes nothing here.
+   */
+  listenLegacy() {
+    const server = net.createServer((socket) => this.accept(socket));
+    server.on('error', () => {});
+    server.listen(paths.legacyPipe(this.self.slug, this.place), () => {
+      this.legacyServer = server;
+    });
+  }
+
   /** Says goodbye to every app and stops listening. */
   async stop() {
     if (!this.running) return;
@@ -138,6 +151,9 @@ class Link extends EventEmitter {
     this.watcher?.close();
     for (const c of [...this.opening, ...this.conns.values()]) c.bye(`${this.self.name} quit`);
     await new Promise((resolve) => this.server.close(() => resolve()));
+    const legacy = this.legacyServer;
+    this.legacyServer = null;
+    if (legacy) await new Promise((resolve) => legacy.close(() => resolve()));
     if ((this.place.platform ?? process.platform) !== 'win32') {
       try {
         fs.unlinkSync(this.socketPath);
@@ -225,7 +241,7 @@ class Link extends EventEmitter {
   }
 
   connect(app) {
-    const socket = net.createConnection(paths.socketPath(app.slug, this.place));
+    const socket = net.createConnection(paths.findSocket(app.slug, this.place));
     const conn = new Connection(socket, this.host(), { initiator: true, expectedId: app.id });
     this.track(conn);
     socket.once('connect', () => conn.start());

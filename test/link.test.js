@@ -852,6 +852,24 @@ test(
 );
 
 test(
+  'Windows: an app also answers on the pipe name an older Grapevine uses, so an older copy of the other app finds it',
+  { skip: process.platform !== 'win32' && 'named pipes' },
+  withPlace(async ({ place }, track) => {
+    const { mv } = pair(place);
+    track(mv);
+    await mv.start();
+    assert.notEqual(paths.legacyPipe(MV.slug, place), paths.socketPath(MV.slug, place));
+    assert.ok(paths.listSlugs(place).includes(MV.slug));
+    const r = await raw(paths.legacyPipe(MV.slug, place));
+    const { auth } = await rawHello(r, { app: PD, capabilities: { 'drops.farming': { provides: ['1.0'] }, players: { uses: ['1.0'] } } });
+    assert.deepEqual(auth.result, {}, 'paired over the older name');
+    r.close();
+    await mv.stop();
+    await assert.rejects(raw(paths.legacyPipe(MV.slug, place)), 'and stops answering on it');
+  }),
+);
+
+test(
   'the activity log: before the pairing is proven, nothing from inside a message, whatever it claims to be; data too big is left out',
   withPlace(async ({ place }, track) => {
     const { pd } = pair(place, { pd: { timing: { ...FAST, pingMs: 60_000 } } });
@@ -900,27 +918,30 @@ test(
     paths.ensureDir(place);
     // A stand-in that answers to Stream Multiview's socket, says hello properly, then floods instead of answering the proof.
     const server = net.createServer((socket) => {
-      const reader = new LineReader((m) => {
-        if (m.method === 'link.auth') {
-          for (let i = 0; i <= QUEUE_MAX; i++) socket.write(encode({ jsonrpc: '2.0', method: 'players.changed', params: {} }));
-          return;
-        }
-        if (m.method !== 'link.hello') return;
-        const key = hs.newKey();
-        socket.write(
-          encode({
-            jsonrpc: '2.0',
-            id: m.id,
-            result: {
-              protocol: 1,
-              app: MV,
-              capabilities: { players: { provides: ['1.0'] }, 'drops.farming': { uses: ['1.0'] } },
-              agreed: { players: '1', 'drops.farming': '1' },
-              auth: { proof: hs.proof(key, 'server', m.params.auth.nonce), nonce: hs.nonce(), key },
-            },
-          }),
-        );
-      }, () => {});
+      const reader = new LineReader(
+        (m) => {
+          if (m.method === 'link.auth') {
+            for (let i = 0; i <= QUEUE_MAX; i++) socket.write(encode({ jsonrpc: '2.0', method: 'players.changed', params: {} }));
+            return;
+          }
+          if (m.method !== 'link.hello') return;
+          const key = hs.newKey();
+          socket.write(
+            encode({
+              jsonrpc: '2.0',
+              id: m.id,
+              result: {
+                protocol: 1,
+                app: MV,
+                capabilities: { players: { provides: ['1.0'] }, 'drops.farming': { uses: ['1.0'] } },
+                agreed: { players: '1', 'drops.farming': '1' },
+                auth: { proof: hs.proof(key, 'server', m.params.auth.nonce), nonce: hs.nonce(), key },
+              },
+            }),
+          );
+        },
+        () => {},
+      );
       socket.on('data', (d) => reader.push(d));
       socket.on('error', () => {});
       server.closed = once(socket, 'close');
