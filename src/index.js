@@ -416,6 +416,20 @@ class Link extends EventEmitter {
   }
 
   /**
+   * What this app and another share: `out`, capabilities this app provides that it uses; `in`,
+   * ones it provides that this app uses. Agreed in the hello while connected; from the known-apps
+   * list otherwise, so a card can say what linking would do before the two have met.
+   */
+  sharesWith(app, conn) {
+    if (conn) return { out: [...conn.agreed.outgoing.keys()].sort(), in: [...conn.agreed.incoming.keys()].sort() };
+    const mine = (list) => (cap) => cap in list;
+    return {
+      out: (app.uses ?? []).filter(mine(this.mine.provides)).sort(),
+      in: (app.provides ?? []).filter(mine(this.mine.uses)).sort(),
+    };
+  }
+
+  /**
    * Every known app, for the Connected apps page:
    * status 'off' (its switch is off) | 'waiting' | 'connected' | 'pair-again' | 'incompatible'.
    */
@@ -445,6 +459,7 @@ class Link extends EventEmitter {
         keyHeldBy: status === 'pair-again' ? (why?.keyHeldBy ?? null) : null,
         version: conn?.peer.version ?? null,
         report,
+        shares: this.sharesWith(app, conn),
         pairedAt: paired?.pairedAt ?? null,
         keysEncrypted: !!this.keys.encrypted,
       };

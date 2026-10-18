@@ -111,17 +111,18 @@ Editors suggest every event's fields and underline mistakes, in plain JavaScript
 
 `link.peers()` lists every known app with what its card needs, and `link.on('change', …)` says when to draw it again.
 
-| Field                                 |                                                                                                            |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `name`, `summary`, `icon`, `download` | The app's logo (bundled, so it shows even when it isn't installed), one line about it, and where to get it |
-| `installed`                           | Whether its data folder exists (with `appDataDir`)                                                         |
-| `enabled`                             | Your switch for it                                                                                         |
-| `status`                              | `off`, `waiting`, `connected`, `pair-again` or `incompatible`                                              |
-| `reason`                              | Why it's waiting: `switched-off` (its own switch is off), `disconnected-there`                             |
-| `keyHeldBy`                           | For `pair-again`: `us` means show **Pair again** here, `them` means it's pressed in the other app          |
-| `version`, `report.text`              | While connected: its version, and "Works" or what's missing ("update Pear Drops to 0.1.7 or later")        |
-| `pairedAt`, `keysEncrypted`           | When they paired, and whether keys are stored encrypted                                                    |
-| `formerIds`                           | Ids the app had before a rename                                                                            |
+| Field                                 |                                                                                                              |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `name`, `summary`, `icon`, `download` | The app's logo (bundled, so it shows even when it isn't installed), one line about it, and where to get it   |
+| `installed`                           | Whether its data folder exists (with `appDataDir`)                                                           |
+| `enabled`                             | Your switch for it                                                                                           |
+| `status`                              | `off`, `waiting`, `connected`, `pair-again` or `incompatible`                                                |
+| `reason`                              | Why it's waiting: `switched-off` (its own switch is off), `disconnected-there`                               |
+| `keyHeldBy`                           | For `pair-again`: `us` means show **Pair again** here, `them` means it's pressed in the other app            |
+| `version`, `report.text`              | While connected: its version, and "Works" or what's missing ("update Pear Drops to 0.1.7 or later")          |
+| `pairedAt`, `keysEncrypted`           | When they paired, and whether keys are stored encrypted                                                      |
+| `formerIds`                           | Ids the app had before a rename                                                                              |
+| `shares`                              | What the two apps share: `{ out, in }`, capabilities this app provides that it uses, and the other way round |
 
 Two calls go with buttons on the card:
 
@@ -166,7 +167,17 @@ To change one, follow [the version rules](PROTOCOL.md#versions): additions are a
 
 ## Adding an app
 
-Add it to `src/known-apps.js`, with its id, slug, summary, a 256×256 logo in `assets/apps/`, its download page and its data folder's name. Every app that updates Grapevine then shows it on its Connected apps page.
+Add it to `src/known-apps.js` with:
+
+- its id and slug
+- a one-line summary
+- a 256×256 logo in `assets/apps/`
+- its download page and its data folder's name
+- the capabilities it `provides` and `uses`
+
+Every app that updates Grapevine then shows it on its Connected apps page, with what the two would share. `link.peers()` gives that as `shares`, from this list until they meet and from the hello after.
+
+When it ships a release that uses Grapevine, record it: `npm run released -- <its id> <its version>`. That fixes the capability versions it uses (they can't change in place after that) and tells other apps which release to ask for.
 
 ## Renaming an app
 
@@ -183,6 +194,7 @@ npm run lint           # ESLint and Prettier
 npm run format         # fix what lint can
 npm run types          # types/capabilities.d.ts from the schemas
 npm run check          # the types are up to date, and tsc finds no type errors
+npm run released -- <app id> <version>   # an app shipped a release using Grapevine (see Adding an app)
 ```
 
 CI runs the tests on Windows, macOS and Linux, and lint, types and coverage on Linux.

@@ -72,6 +72,9 @@ test(
       pd.peers().map((p) => [p.name, p.status]),
       [['Stream Multiview', 'waiting']],
     );
+    assert.deepEqual(pd.peers()[0].shares, { out: ['drops.farming'], in: ['players'] }, 'before they meet: from the known-apps list');
+    const { pd: alone } = pair(place, { pd: { provides: {}, uses: {} } });
+    assert.deepEqual(alone.peers()[0].shares, { out: [], in: [] }, 'nothing in common');
     pd.publish('drops.farming.changed', FARMING); // before anyone is listening: kept for later
     const got = once(mv, 'event');
     await mv.start();
@@ -92,6 +95,8 @@ test(
     assert.equal((await mv.request(PD.id, 'drops.farming.get')).state, 'paused', 'a .get with no handler answers with the last .changed');
 
     const [peer] = pd.peers();
+    assert.deepEqual(peer.shares, { out: ['drops.farming'], in: ['players'] }, 'what they share, as agreed');
+    assert.deepEqual(mv.peers()[0].shares, { out: ['players'], in: ['drops.farming'] });
     assert.equal(peer.status, 'connected');
     assert.equal(peer.version, '0.4.0');
     assert.equal(peer.report.text, 'Works');

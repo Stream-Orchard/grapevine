@@ -197,6 +197,8 @@ A capability is a named feature one app provides and others use, defined by a JS
 
 What a drops app is farming, with enough for another app to show it, in a top-bar widget say. Provided by Pear Drops.
 
+Event `drops.farming.changed`, and `drops.farming.get` answers with the same: the whole state, below. `drops.farming.show` is further down.
+
 | Field          |                                                                                                                                                                                                                                                                                                                                 |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `state`        | `farming` (its player is watching a stream for drop credit), `waiting`, `paused`, `done`, `signed-out`, or one added later                                                                                                                                                                                                      |
@@ -215,6 +217,8 @@ What a drops app is farming, with enough for another app to show it, in a top-ba
 ### `players` 1.0
 
 An app's stream players, by site. Provided by Stream Multiview.
+
+Event `players.changed`, and `players.get` answers with the same: the whole state, below.
 
 | Field       |                                                                                                                 |
 | ----------- | --------------------------------------------------------------------------------------------------------------- |
@@ -259,7 +263,7 @@ After the hello, each app tells its user one of:
 | **Works, with a feature missing** | A capability one app wants has no major in common. It names the app with the older versions and, if known, the release to update to: "update Pear Drops to 0.1.7 or later" |
 | **Can't connect**                 | No protocol version in common. Again, it names the app to update                                                                                                           |
 
-The releases come from the known-apps list (`src/known-apps.js`): `firstRelease` maps `"<capability>@<major>.<minor>"` and `"protocol@<n>"` to the first release of that app that had it.
+The releases come from `schemas/released.json`, recorded as each app ships (`npm run released`), through the known-apps list's `firstRelease`: `"<capability>@<major>.<minor>"` and `"protocol@<n>"` mapped to the first release of that app that had them.
 
 ## Renaming an app
 

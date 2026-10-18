@@ -64,6 +64,9 @@ export interface KnownApp {
   download: string;
   /** Its folder in the OS's app data folder */
   dataFolder: string;
+  /** The capabilities it provides and uses (names), so a card can say what linking would do */
+  provides: string[];
+  uses: string[];
   /** "capability@major.minor" (or "protocol@N") -> the app version that first had it */
   firstRelease: Record<string, string>;
 }
@@ -119,6 +122,8 @@ export interface Peer {
   /** Its version, while connected */
   version: string | null;
   report: Report | null;
+  /** What the two apps share: `out`, capabilities this app provides that it uses; `in`, ones it provides that this app uses */
+  shares: { out: string[]; in: string[] };
   pairedAt: string | null;
   keysEncrypted: boolean;
 }

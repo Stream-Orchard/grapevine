@@ -55,6 +55,8 @@ test('keys in memory', () => {
 test('known apps: each has what its card needs, and whether it is installed comes from its data folder', () => {
   for (const app of KNOWN_APPS) {
     for (const k of ['id', 'slug', 'name', 'summary', 'icon', 'homepage', 'download', 'dataFolder']) assert.ok(app[k], `${app.name}: ${k}`);
+    for (const cap of [...app.provides, ...app.uses])
+      assert.ok(require('../src/schema').Schemas.load().capabilityOf(`${cap}.x`) === cap, `${app.name}: ${cap} has a schema`);
     assert.ok(fs.existsSync(app.icon), `${app.name}: its logo is bundled`);
     assert.match(iconDataUrl(app.icon), /^data:image\/png;base64,iVBOR/);
   }

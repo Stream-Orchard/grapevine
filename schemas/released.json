@@ -1,0 +1,5 @@
+{
+  "description": "Capability versions that have shipped in an app's release, and which release of each app first had them. Written by `npm run released -- <app id> <version>`; never by hand. A version recorded here can't change in place: test/released.test.js fails until the change goes in a new minor.",
+  "schemas": {},
+  "firstRelease": {}
+}

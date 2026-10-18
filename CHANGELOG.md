@@ -1,6 +1,11 @@
 # What's new in Grapevine
 
-## 0.4.0 (current)
+## 0.5.0 (current)
+- Each known app lists the capabilities it provides and uses, and `peers()` says what two apps share (`shares`), so an app's Connected apps page can describe any app without code of its own.
+- `npm run released` records an app release that uses Grapevine: those capability versions can't change in place after that, and `firstRelease` fills in from it.
+- The docs are checked against the schemas, and the repo has skills for changes, capabilities, pull requests, releases and recording an app's release.
+
+## 0.4.0
 - `drops.farming`'s `drop.rewards` can list every reward of the drop, with its picture, the minutes it unlocks at, whether it's claimed, ready or locked, and when a locked one should unlock. Enough for a widget to draw the reward track.
 
 ## 0.3.0

@@ -7,6 +7,8 @@ const fs = require('fs');
 const path = require('path');
 
 const ICONS = path.join(__dirname, '..', 'assets', 'apps');
+// Which release of each app first had each capability version: written by `npm run released`.
+const RELEASED = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'schemas', 'released.json'), 'utf8')).firstRelease;
 
 /**
  * @typedef {object} KnownApp
@@ -19,6 +21,8 @@ const ICONS = path.join(__dirname, '..', 'assets', 'apps');
  * @property {string} homepage
  * @property {string} download its latest release
  * @property {string} dataFolder its folder in the OS's app data folder: no folder means not installed
+ * @property {string[]} provides the capabilities it provides (their names), so another app can say what the two share before they've met
+ * @property {string[]} uses the capabilities it uses
  * @property {Record<string, string>} firstRelease "capability@major.minor" (or "protocol@N") -> the app version that first had it
  */
 
@@ -34,7 +38,9 @@ const KNOWN_APPS = [
     homepage: 'https://github.com/Stream-Orchard/pear-drops',
     download: 'https://github.com/Stream-Orchard/pear-drops/releases/latest',
     dataFolder: 'Pear Drops',
-    firstRelease: {},
+    provides: ['drops.farming'],
+    uses: ['players'],
+    firstRelease: { ...RELEASED['com.streamorchard.peardrops'] },
   },
   {
     id: 'com.glowingpear.streammultiview',
@@ -46,7 +52,9 @@ const KNOWN_APPS = [
     homepage: 'https://github.com/GlowingPear/stream-window-multiview',
     download: 'https://github.com/GlowingPear/stream-window-multiview/releases/latest',
     dataFolder: 'Stream Multiview',
-    firstRelease: {},
+    provides: ['players'],
+    uses: ['drops.farming'],
+    firstRelease: { ...RELEASED['com.glowingpear.streammultiview'] },
   },
 ];
 
