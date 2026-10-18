@@ -1,6 +1,9 @@
 # What's new in Grapevine
 
-## 0.5.0 (current)
+## 0.5.1 (current)
+- If an app's socket goes while its link is starting (its folder removed, say), `start()` fails with the error rather than throwing one the app can't catch.
+
+## 0.5.0
 - Each known app lists the capabilities it provides and uses, and `peers()` says what two apps share (`shares`), so an app's Connected apps page can describe any app without code of its own.
 - `npm run released` records an app release that uses Grapevine: those capability versions can't change in place after that, and `firstRelease` fills in from it.
 - The docs are checked against the schemas, and the repo has skills for changes, capabilities, pull requests, releases and recording an app's release.

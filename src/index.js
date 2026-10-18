@@ -99,7 +99,14 @@ class Link extends EventEmitter {
       const server = net.createServer((socket) => this.accept(socket));
       const go = () =>
         server.listen(this.socketPath, () => {
-          if (platform !== 'win32') fs.chmodSync(this.socketPath, 0o600);
+          // The socket can vanish before this runs (its folder removed): start() fails, rather than
+          // an exception the app can't catch.
+          try {
+            if (platform !== 'win32') fs.chmodSync(this.socketPath, 0o600);
+          } catch (err) {
+            server.close();
+            return reject(err);
+          }
           this.server = server;
           resolve();
         });
