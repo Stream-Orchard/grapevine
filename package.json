@@ -1,6 +1,6 @@
 {
   "name": "@streamorchard/grapevine",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Lets desktop apps on the same computer find each other and talk, privately: local sockets, JSON-RPC, pairing and versioned capabilities.",
   "license": "GPL-3.0-only",
   "author": "StreamOrchard",
@@ -32,7 +32,8 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "grapevine-stand-in": "stand-in-peer.js"
+    "grapevine-stand-in": "stand-in-peer.js",
+    "grapevine-check": "scripts/check-shipped.js"
   },
   "files": [
     "src",
@@ -41,7 +42,8 @@
     "fixtures",
     "assets/apps",
     "stand-in-peer.js",
-    "PROTOCOL.md"
+    "PROTOCOL.md",
+    "scripts/check-shipped.js"
   ],
   "engines": {
     "node": ">=22"

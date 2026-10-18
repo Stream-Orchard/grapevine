@@ -1,6 +1,10 @@
 # What's new in Grapevine
 
-## 0.5.1 (current)
+## 0.6.0 (current)
+- `npx grapevine-check`, run in an app's repo, lists the capability versions its releases have shipped that Grapevine hasn't recorded yet, with the command that records them. Apps declare what they speak in their `package.json`'s `grapevine` field.
+- `npm run released` takes the versions a release declared, so it records what that release shipped.
+
+## 0.5.1
 - If an app's socket goes while its link is starting (its folder removed, say), `start()` fails with the error rather than throwing one the app can't catch.
 
 ## 0.5.0

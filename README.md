@@ -28,10 +28,17 @@ npm install @streamorchard/grapevine
 
 ## Use it
 
+Say what your app speaks in its `package.json`. It's the one place it's written, and every release tag keeps it, which is how `grapevine-check` knows what each release shipped (see [Recording releases](#recording-releases)):
+
+```json
+"grapevine": { "app": "com.streamorchard.peardrops", "provides": { "drops.farming": "1.0" }, "uses": { "players": "1.0" } }
+```
+
 ```js
 const { app, safeStorage } = require('electron');
 const path = require('path');
 const { createLink, fileKeyStore } = require('@streamorchard/grapevine');
+const { grapevine } = require('./package.json');
 
 const link = createLink({
   app: {
@@ -41,8 +48,8 @@ const link = createLink({
     version: app.getVersion(),
     icon: path.join(__dirname, 'icon.png'),
   },
-  provides: { 'drops.farming': '1.0' }, // what it tells other apps
-  uses: { players: '1.0' }, // what it listens to
+  provides: grapevine.provides, // what it tells other apps
+  uses: grapevine.uses, // what it listens to
   allowed: (appId) => settings.connectedApps[appId]?.enabled === true, // your Connected apps switches
   keys: fileKeyStore(path.join(app.getPath('userData'), 'grapevine.json'), {
     encrypt: (t) => safeStorage.encryptString(t).toString('base64'),
@@ -177,7 +184,22 @@ Add it to `src/known-apps.js` with:
 
 Every app that updates Grapevine then shows it on its Connected apps page, with what the two would share. `link.peers()` gives that as `shares`, from this list until they meet and from the hello after.
 
-When it ships a release that uses Grapevine, record it: `npm run released -- <its id> <its version>`. That fixes the capability versions it uses (they can't change in place after that) and tells other apps which release to ask for.
+When it ships a release that uses Grapevine, record it (next section).
+
+## Recording releases
+
+Once an app ships a capability version, Grapevine records it. From then on that version can't change in place, and other apps can say which release to update to.
+
+In the app's repo, at the start of every change:
+
+```sh
+npx grapevine-check
+```
+
+- **It reads** the `grapevine` field from each of the app's release tags (`v*`), and Grapevine's record from GitHub (the installed copy if it's offline, or with `--offline`).
+- **It lists** any capability version a release shipped that isn't recorded yet, with the command to record it, e.g. `npm run released -- com.streamorchard.peardrops 0.1.6 drops.farming@1.0 players@1.0`.
+- **That command runs in a Grapevine checkout** (its `app-shipped` skill), followed by a pull request and a patch release.
+- **`--strict`** exits 1 while something is unrecorded, for CI.
 
 ## Renaming an app
 
