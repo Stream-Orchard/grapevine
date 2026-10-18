@@ -713,3 +713,259 @@ test(
     }
   }),
 );
+
+// ------------------------------------------------------------------ the activity log
+
+/** The line a message takes on the wire, in bytes. */
+const wire = (m) => Buffer.byteLength(encode(m));
+
+test(
+  'the activity log: both apps see every message, from the hello to the goodbye, with no data for the hello and the proofs',
+  withPlace(async ({ place }, track) => {
+    const slow = { ...FAST, pingMs: 60_000 }; // no pings of their own in the way
+    const { pd, mv } = pair(place, { pd: { timing: slow }, mv: { timing: slow } });
+    track(pd, mv);
+    const log = { pd: [], mv: [] };
+    pd.on('message', (m) => log.pd.push(m));
+    mv.on('message', (m) => log.mv.push(m));
+    const { GrapevineError } = require('../src');
+    pd.handle('drops.farming.get', () => ({ ...FARMING, seq: 0, at: new Date().toISOString() }));
+    await pd.start();
+    await mv.start();
+    await Promise.all([until(() => pd.isConnected(MV.id), 'Pear Drops connected'), until(() => mv.isConnected(PD.id), 'Multiview connected')]);
+    const find = (side, dir, kind, method) =>
+      until(() => log[side].find((m) => m.dir === dir && m.kind === kind && m.method === method), `${side}: ${dir} ${kind} ${method}`);
+
+    // The hello and the proofs: Pear Drops connects, so it knows who it expects; Multiview doesn't until the hello.
+    const hello = await find('pd', 'out', 'request', 'link.hello');
+    assert.equal(hello.app, MV.id);
+    assert.equal(typeof hello.id, 'number');
+    assert.ok(!('data' in hello), 'no nonce in the log');
+    assert.ok(hello.bytes > 0 && typeof hello.at === 'number');
+    const helloIn = await find('mv', 'in', 'request', 'link.hello');
+    assert.equal(helloIn.app, null, "the listening app doesn't know who it is yet");
+    assert.equal(helloIn.bytes, hello.bytes, 'the same line, both sides');
+    assert.ok(!('ms' in helloIn));
+    const helloReply = await find('mv', 'out', 'reply', 'link.hello');
+    assert.equal(helloReply.app, PD.id);
+    assert.equal(helloReply.id, hello.id);
+    assert.ok(!('data' in helloReply), 'no pairing key in the log');
+    assert.ok(helloReply.ms >= 0, 'how long Multiview took to answer');
+    const helloBack = await find('pd', 'in', 'reply', 'link.hello');
+    assert.ok(!('data' in helloBack) && helloBack.ms >= 0 && helloBack.app === MV.id);
+    for (const [side, dir, kind] of [
+      ['pd', 'out', 'request'],
+      ['mv', 'in', 'request'],
+      ['mv', 'out', 'reply'],
+      ['pd', 'in', 'reply'],
+    ]) {
+      const auth = await find(side, dir, kind, 'link.auth');
+      assert.ok(!('data' in auth), `${side}: no proof in the log`);
+      assert.equal(auth.app, side === 'pd' ? MV.id : PD.id);
+    }
+
+    // Subscribing: each app subscribes to what it uses, and hears back how long the answer took.
+    const sub = await find('pd', 'out', 'request', 'link.subscribe');
+    assert.deepEqual(sub.data, { events: ['players.changed'] });
+    const subIn = await find('mv', 'in', 'request', 'link.subscribe');
+    assert.deepEqual(subIn.data, sub.data);
+    const subReply = await find('pd', 'in', 'reply', 'link.subscribe');
+    assert.deepEqual(subReply.data, { subscribed: ['players.changed'] });
+    assert.equal(subReply.id, sub.id);
+    assert.ok(subReply.ms >= 0, 'the round trip');
+    await find('mv', 'out', 'reply', 'link.subscribe');
+    await until(() => log.pd.filter((m) => m.dir === 'in' && m.method === 'link.subscribe').length, 'Multiview subscribed');
+    assert.equal(
+      log.pd.filter((m) => m.dir === 'in' && m.kind === 'request' && m.method === 'link.subscribe').length,
+      1,
+      'reported once, even if it came while proving',
+    );
+
+    // An event, out and in, with its data and size.
+    const sent = pd.publish('drops.farming.changed', FARMING);
+    const out = await find('pd', 'out', 'event', 'drops.farming.changed');
+    const heard = await find('mv', 'in', 'event', 'drops.farming.changed');
+    assert.deepEqual(out.data, sent);
+    assert.deepEqual(heard.data, sent);
+    assert.ok(!('id' in out) && !('ms' in out), 'an event has no id or ms');
+    assert.equal(out.bytes, wire({ jsonrpc: '2.0', method: 'drops.farming.changed', params: sent }));
+    assert.equal(heard.bytes, out.bytes);
+    assert.equal(heard.app, PD.id);
+
+    // A capability request and its reply.
+    const result = await mv.request(PD.id, 'drops.farming.get');
+    const ask = await find('mv', 'out', 'request', 'drops.farming.get');
+    assert.deepEqual(ask.data, {});
+    const answer = await find('mv', 'in', 'reply', 'drops.farming.get');
+    assert.deepEqual(answer.data, result);
+    assert.equal(answer.id, ask.id);
+    assert.ok(answer.ms >= 0);
+    const answered = await find('pd', 'out', 'reply', 'drops.farming.get');
+    assert.deepEqual(answered.data, result);
+    assert.ok(answered.ms >= 0, 'how long Pear Drops took');
+
+    // An error: its code and message, never its data.
+    pd.handle('drops.farming.get', () => {
+      throw new GrapevineError(CODES.TOO_MANY, 'busy', { secret: 'pearfan' });
+    });
+    await assert.rejects(mv.request(PD.id, 'drops.farming.get'), (e) => e.code === CODES.TOO_MANY);
+    for (const [side, dir] of [
+      ['pd', 'out'],
+      ['mv', 'in'],
+    ]) {
+      const err = await find(side, dir, 'error', 'drops.farming.get');
+      assert.deepEqual(err.data, { code: CODES.TOO_MANY, message: 'busy' });
+      assert.ok(err.ms >= 0 && typeof err.id === 'number');
+    }
+
+    // A ping, from Test on a card.
+    assert.ok((await pd.test(MV.id)).ok);
+    const ping = await find('pd', 'out', 'request', 'link.ping');
+    assert.deepEqual(ping.data, {});
+    const pong = await find('pd', 'in', 'reply', 'link.ping');
+    assert.deepEqual(pong.data, {});
+    assert.ok(pong.ms >= 0);
+    await find('mv', 'in', 'request', 'link.ping');
+    await find('mv', 'out', 'reply', 'link.ping');
+
+    // Every message one app sent, the other received, the same size.
+    const sentBy = log.pd.filter((m) => m.dir === 'out');
+    await until(() => log.mv.filter((m) => m.dir === 'in').length >= sentBy.length, 'Multiview to hear it all');
+    const heardBy = log.mv.filter((m) => m.dir === 'in');
+    assert.deepEqual(
+      heardBy.map((m) => [m.kind, m.method, m.bytes]),
+      sentBy.map((m) => [m.kind, m.method, m.bytes]),
+    );
+
+    // The goodbye, and nothing after it.
+    const conn = pd.conns.get(MV.id);
+    await pd.stop();
+    const bye = await find('pd', 'out', 'event', 'link.bye');
+    assert.deepEqual(bye.data, { reason: 'Pear Drops quit' });
+    assert.deepEqual((await find('mv', 'in', 'event', 'link.bye')).data, bye.data);
+    assert.equal(conn.inflight.out.size + conn.inflight.in.size, 0, 'nothing kept after closing');
+    const count = log.pd.length;
+    conn.send({ jsonrpc: '2.0', method: 'link.bye', params: {} });
+    assert.equal(log.pd.length, count, 'not sent after closing, so not reported');
+  }),
+);
+
+test(
+  'the activity log: what a raw client sends, kept to the rules (nothing for a line that is not JSON, a reply to nothing, and what the limit drops)',
+  withPlace(async ({ place }, track) => {
+    const { pd } = pair(place, { pd: { timing: { ...FAST, rateMax: 5, strikes: 5, pingMs: 60_000 } } });
+    track(pd);
+    const log = [];
+    pd.on('message', (m) => log.push(m));
+    await pd.start();
+    const sock = paths.socketPath(PD.slug, place);
+
+    const junk = await raw(sock);
+    junk.send('this is not json\n');
+    await junk.next();
+    junk.send('{"jsonrpc":"2.0"}\n'); // JSON, but neither a request, a reply nor an event
+    await junk.next();
+    assert.deepEqual(
+      log.map((m) => [m.dir, m.kind, m.method, m.id]),
+      [
+        ['out', 'error', null, null],
+        ['out', 'error', null, null],
+      ],
+      'only the replies: nothing for what it sent',
+    );
+    assert.ok(
+      log.every((m) => !('data' in m) && !('ms' in m)),
+      "before the hello, a reply to nothing known could be the hello's: no data",
+    );
+    junk.close();
+
+    log.length = 0;
+    const r = await raw(sock);
+    await rawHello(r);
+    await until(() => log.some((m) => m.dir === 'out' && m.method === 'link.subscribe'), 'its own subscribe');
+    assert.deepEqual(
+      log.filter((m) => m.method?.startsWith('link.')).map((m) => [m.dir, m.kind, m.method, m.app]),
+      [
+        ['in', 'request', 'link.hello', null],
+        ['out', 'reply', 'link.hello', MV.id],
+        ['in', 'request', 'link.auth', MV.id],
+        ['out', 'reply', 'link.auth', MV.id],
+        ['out', 'request', 'link.subscribe', MV.id],
+      ],
+    );
+    // Once connected, a reply to nothing has its data, but no method or ms.
+    const line = { jsonrpc: '2.0', id: 'nope', result: { channel: 'pixelpear' } };
+    r.send(line);
+    const stray = await until(() => log.find((m) => m.id === 'nope'), 'the stray reply');
+    assert.deepEqual(stray, {
+      at: stray.at,
+      app: MV.id,
+      dir: 'in',
+      kind: 'reply',
+      method: null,
+      id: 'nope',
+      bytes: wire(line),
+      data: { channel: 'pixelpear' },
+    });
+
+    // Over the limit: still reported as received, and the "slow down" too.
+    await sleep(1050);
+    log.length = 0;
+    for (let i = 0; i < 8; i++) r.send({ jsonrpc: '2.0', id: 100 + i, method: 'link.ping', params: {} });
+    await until(() => log.filter((m) => m.dir === 'out').length === 8, 'eight answers');
+    assert.equal(log.filter((m) => m.dir === 'in' && m.method === 'link.ping').length, 8, 'all eight received');
+    const slowDown = log.filter((m) => m.kind === 'error');
+    assert.ok(slowDown.length >= 1);
+    assert.ok(slowDown.every((m) => m.method === 'link.ping' && m.data.code === CODES.TOO_MANY && m.ms >= 0));
+  }),
+);
+
+test(
+  'the activity log costs nothing when no one listens, and forgets requests that are never answered',
+  withPlace(async ({ place }, track) => {
+    const { Connection } = require('../src/connection');
+    const report = Connection.prototype.report;
+    let built = 0;
+    Connection.prototype.report = function (...args) {
+      built += 1;
+      return report.apply(this, args);
+    };
+    try {
+      const { pd, mv } = pair(place);
+      track(pd, mv);
+      await pd.start();
+      await mv.start();
+      await once(mv, 'connected');
+      pd.publish('drops.farming.changed', FARMING);
+      await once(mv, 'event');
+      await mv.request(PD.id, 'drops.farming.get');
+      assert.equal(built, 0, 'no entries built');
+      const conn = pd.conns.get(MV.id);
+      assert.equal(conn.inflight.out.size + conn.inflight.in.size, 0, 'no requests kept');
+
+      const log = [];
+      const listen = (m) => log.push(m);
+      mv.on('message', listen);
+      await mv.request(PD.id, 'drops.farming.get');
+      assert.ok(built > 0 && log.length === 2, 'built once someone listens');
+      mv.off('message', listen);
+      built = 0;
+      await mv.request(PD.id, 'drops.farming.get');
+      assert.equal(built, 0, 'and not after they stop');
+
+      // Requests that never get a reply are forgotten after the request timeout, and past a cap.
+      const map = new Map();
+      conn.remember(map, 1, 'link.ping', 0);
+      conn.remember(map, 2, 'link.ping', 5000);
+      conn.remember(map, 3, 'link.ping', 20_000);
+      assert.deepEqual([...map.keys()], [3], 'older than the request timeout');
+      for (let i = 0; i < 1005; i++) conn.remember(map, `r${i}`, 'link.ping', 20_000);
+      assert.equal(map.size, 1000, 'at most a thousand');
+      assert.ok(!map.has(3) && map.has('r1004'));
+      conn.remember(map, 'r1004', 'link.ping', 20_001); // a reused id moves to the end
+      assert.equal([...map.keys()].at(-1), 'r1004');
+    } finally {
+      Connection.prototype.report = report;
+    }
+  }),
+);

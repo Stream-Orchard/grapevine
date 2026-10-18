@@ -301,6 +301,9 @@ class Link extends EventEmitter {
       schemas: this.schemas,
       timing: this.timing,
       log: (level, text) => this.log(level, text),
+      // The activity log: only built while something listens for it.
+      watching: () => this.listenerCount('message') > 0,
+      message: (conn, m) => this.emit('message', m),
       call: (conn, method, params) => this.call(conn, method, params),
       subscribe: (conn, events) => {
         const offered = new Set();

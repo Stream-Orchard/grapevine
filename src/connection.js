@@ -4,7 +4,7 @@
 
 const { EventEmitter } = require('events');
 const { LineReader, encode } = require('./framing');
-const { Rpc } = require('./rpc');
+const { Rpc, REQUEST_TIMEOUT_MS } = require('./rpc');
 const { CODES, GrapevineError } = require('./errors');
 const hs = require('./handshake');
 
@@ -15,6 +15,26 @@ const TIMING = Object.freeze({
   rateMax: 50, // messages a second
   strikes: 3, // over the limit this many times in a minute closes the connection
 });
+
+// For the activity log: requests waiting for a reply are forgotten after this long, or past this many.
+const INFLIGHT_MS = REQUEST_TIMEOUT_MS;
+const INFLIGHT_MAX = 1000;
+// Their messages carry nonces, proofs and pairing keys, so the activity log leaves their data out.
+const SECRET = new Set(['link.hello', 'link.auth']);
+
+/**
+ * One message for the activity log (Link's 'message' event).
+ * @typedef {object} Message
+ * @property {number} at
+ * @property {string | null} app
+ * @property {'out' | 'in'} dir
+ * @property {'request' | 'reply' | 'error' | 'event'} kind
+ * @property {string | null} method
+ * @property {string | number | null} [id]
+ * @property {number} [ms]
+ * @property {number} bytes
+ * @property {any} [data]
+ */
 
 /**
  * What a connection needs from the link that owns it.
@@ -32,6 +52,8 @@ const TIMING = Object.freeze({
  * @property {(conn: Connection, events: string[]) => string[]} subscribe
  * @property {(conn: Connection) => void} [afterSubscribe] sends the latest state to a new subscriber
  * @property {(level: string, text: string) => void} log
+ * @property {() => boolean} [watching] whether anything listens for the activity log; nothing is built for it otherwise
+ * @property {(conn: Connection, message: Message) => void} [message] one message sent or received, for the activity log
  * @property {typeof TIMING} timing
  */
 
@@ -59,13 +81,16 @@ class Connection extends EventEmitter {
     this.rate = { windowStart: Date.now(), count: 0, strikes: [] };
     this.lastHeard = Date.now();
     this.closeReason = null;
+    // Requests waiting for a reply, by id, for the activity log: ones this app sent, and ones it was sent.
+    /** @type {{out: Map<any, {method: string, at: number}>, in: Map<any, {method: string, at: number}>}} */
+    this.inflight = { out: new Map(), in: new Map() };
 
     this.rpc = new Rpc((m) => this.send(m), {
       onRequest: (m) => this.onRequest(m),
       onNotification: (m) => this.onNotification(m),
     });
     this.reader = new LineReader(
-      (m) => this.onMessage(m),
+      (m, bytes) => this.onMessage(m, bytes),
       (why) => {
         if (why === 'too-long') this.close('A message was too long');
         else
@@ -83,7 +108,57 @@ class Connection extends EventEmitter {
   }
 
   send(message) {
-    if (this.state !== 'closed' && !this.socket.destroyed) this.socket.write(encode(message));
+    if (this.state === 'closed' || this.socket.destroyed) return;
+    const line = encode(message);
+    this.socket.write(line);
+    if (this.host.watching?.()) this.report('out', message, Buffer.byteLength(line));
+  }
+
+  // ------------------------------------------------------------------ the activity log
+
+  /** Tells the link about one message sent or received, for its 'message' event. */
+  report(dir, m, bytes) {
+    if (this.state === 'closed') return;
+    const at = Date.now();
+    const isId = typeof m.id === 'number' || typeof m.id === 'string';
+    /** @type {Message} */
+    let entry;
+    if ('result' in m || 'error' in m) {
+      // A reply answers a request that went the other way.
+      const asked = isId ? this.inflight[dir === 'out' ? 'in' : 'out'] : null;
+      const req = asked?.get(m.id);
+      asked?.delete(m.id);
+      const method = req?.method ?? null;
+      const failed = 'error' in m;
+      entry = { at, app: this.peerApp(), dir, kind: failed ? 'error' : 'reply', method, id: m.id ?? null, bytes };
+      if (req) entry.ms = at - req.at;
+      // An unknown reply before the connection is ready could be the hello's: no data either.
+      if (!SECRET.has(method) && (method !== null || this.state === 'ready')) {
+        const e = m.error ?? {};
+        entry.data = failed ? { code: e.code, message: e.message } : m.result;
+      }
+    } else if (typeof m.method === 'string') {
+      const request = 'id' in m;
+      entry = { at, app: this.peerApp(), dir, kind: request ? 'request' : 'event', method: m.method, ...(request ? { id: m.id } : {}), bytes };
+      if (request && isId) this.remember(this.inflight[dir], m.id, m.method, at);
+      if (!SECRET.has(m.method)) entry.data = m.params ?? {};
+    } else return; // not JSON-RPC at all
+    this.host.message?.(this, entry);
+  }
+
+  /** The other app's id as this app knows it, or null until its hello says. */
+  peerApp() {
+    return this.peerId ?? this.expectedId ?? null;
+  }
+
+  /** Remembers a request, forgetting ones too old to be answered (or past the cap). */
+  remember(map, id, method, at) {
+    map.delete(id); // a reused id goes to the end
+    map.set(id, { method, at });
+    for (const [oldId, r] of map) {
+      if (map.size <= INFLIGHT_MAX && at - r.at <= INFLIGHT_MS) break;
+      map.delete(oldId);
+    }
   }
 
   // ------------------------------------------------------------------ the connecting app
@@ -130,7 +205,7 @@ class Connection extends EventEmitter {
     }
     if (!stored) keys.set(this.peerId, key);
     this.ready();
-    for (const m of this.queue.splice(0)) this.onMessage(m);
+    for (const m of this.queue.splice(0)) this.dispatch(m);
   }
 
   refused(err) {
@@ -237,8 +312,13 @@ class Connection extends EventEmitter {
 
   // ------------------------------------------------------------------ incoming
 
-  onMessage(m) {
+  onMessage(m, bytes) {
     this.lastHeard = Date.now();
+    if (this.host.watching?.()) this.report('in', m, bytes);
+    this.dispatch(m);
+  }
+
+  dispatch(m) {
     if (this.state === 'authing' && !('result' in m || 'error' in m)) return void this.queue.push(m);
     if (!this.withinRate(m)) return;
     this.rpc.handle(m);
@@ -316,6 +396,8 @@ class Connection extends EventEmitter {
     clearTimeout(this.handshakeTimer);
     clearInterval(this.pingTimer);
     this.rpc.close();
+    this.inflight.out.clear();
+    this.inflight.in.clear();
     // end() lets a last reply (why it was refused) reach the other app; destroy() if it doesn't finish.
     this.socket.end();
     setTimeout(() => this.socket.destroy(), 500).unref?.();

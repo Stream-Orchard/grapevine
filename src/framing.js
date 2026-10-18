@@ -11,13 +11,13 @@ function encode(message) {
 }
 
 /**
- * Collects bytes into lines and parses each one. `onMessage(object)` gets every JSON object,
- * `onBad(reason)` anything else: 'parse' (not JSON), 'not-object' (an array, number, …) or
+ * Collects bytes into lines and parses each one. `onMessage(object, bytes)` gets every JSON
+ * object, with its line's size in bytes (the newline included), `onBad(reason)` anything else: 'parse' (not JSON), 'not-object' (an array, number, …) or
  * 'too-long' (over the limit, after which the reader stops).
  */
 class LineReader {
   /**
-   * @param {(message: Record<string, unknown>) => void} onMessage
+   * @param {(message: Record<string, unknown>, bytes: number) => void} onMessage
    * @param {(reason: 'parse' | 'not-object' | 'too-long') => void} onBad
    * @param {number} [max]
    */
@@ -37,14 +37,15 @@ class LineReader {
     for (let at = this.buffer.indexOf('\n'); at !== -1; at = this.buffer.indexOf('\n')) {
       const line = this.buffer.slice(0, at);
       this.buffer = this.buffer.slice(at + 1);
-      if (Buffer.byteLength(line) > this.max) return this.stop();
-      if (line.trim()) this.parse(line);
+      const bytes = Buffer.byteLength(line);
+      if (bytes > this.max) return this.stop();
+      if (line.trim()) this.parse(line, bytes + 1);
       if (this.done) return;
     }
     if (Buffer.byteLength(this.buffer) > this.max) this.stop();
   }
 
-  parse(line) {
+  parse(line, bytes) {
     let value;
     try {
       value = JSON.parse(line);
@@ -52,7 +53,7 @@ class LineReader {
       return this.onBad('parse');
     }
     if (!value || typeof value !== 'object' || Array.isArray(value)) return this.onBad('not-object');
-    this.onMessage(value);
+    this.onMessage(value, bytes);
   }
 
   stop() {

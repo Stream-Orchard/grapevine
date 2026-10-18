@@ -44,3 +44,14 @@ test('a line over the limit stops the reader, whether or not it has ended yet', 
   assert.deepEqual(b.bad, ['too-long']);
   assert.equal(MAX_LINE, 1024 * 1024);
 });
+
+test("each message comes with its line's size in bytes, the newline included", () => {
+  const sizes = [];
+  const r = new LineReader(
+    (_m, bytes) => sizes.push(bytes),
+    () => {},
+  );
+  r.push(encode({ a: 1 }) + encode({ b: 'é ✓' }));
+  assert.deepEqual(sizes, [8, Buffer.byteLength('{"b":"é ✓"}\n')]);
+  assert.equal(sizes[1], 15, 'bytes, not characters');
+});
