@@ -1,8 +1,7 @@
 name: Publish
 
-# A published GitHub release (tag v<version>, matching package.json) stages that version on npm.
-# npm trusts this workflow directly (trusted publishing), so no npm token is stored anywhere, and
-# the workflow can only stage: the version goes live once a maintainer approves it on npmjs.com.
+# A published GitHub release (tag v<version>, matching package.json) publishes that version to npm.
+# npm trusts this workflow directly (trusted publishing), so no npm token is stored anywhere.
 on:
   release:
     types: [published]
@@ -31,4 +30,4 @@ jobs:
       - run: npm run lint
       - run: npm run check
       - run: npm test
-      - run: npm stage publish
+      - run: npm publish
