@@ -137,6 +137,30 @@ export type TestResult =
       text: string;
     };
 
+/** One message sent to or received from another app, for an activity log (the link's 'message' event). */
+export interface Message {
+  /** Date.now() when it was sent or received */
+  at: number;
+  /** The other app's id as this app knows it; null while not yet known (before its hello arrives) */
+  app: string | null;
+  dir: 'out' | 'in';
+  /** 'error' is a reply with an error; 'event' a notification */
+  kind: 'request' | 'reply' | 'error' | 'event';
+  /** The method; for a reply or error, the method of the request it answers, or null if unknown */
+  method: string | null;
+  /** The JSON-RPC id, for requests, replies and errors */
+  id?: string | number | null;
+  /** Replies and errors: ms since the request (in: the round trip; out: how long this app took to answer) */
+  ms?: number;
+  /** Its size on the wire, newline included */
+  bytes: number;
+  /**
+   * The params (request, event), the result (reply), or `{ code, message }` (error). Left out for
+   * link.hello and link.auth and their replies: they carry nonces, proofs and pairing keys.
+   */
+  data?: unknown;
+}
+
 export interface CallContext {
   appId: string;
   app: AppInfo;
@@ -178,6 +202,8 @@ export declare class Link extends EventEmitter {
   on(event: 'unpaired', listener: (appId: string) => void): this;
   on(event: 'change', listener: () => void): this;
   on(event: 'log', listener: (level: 'info' | 'warn' | 'error', text: string) => void): this;
+  /** Every message sent or received, for an activity log. Only built while something listens. */
+  on(event: 'message', listener: (m: Message) => void): this;
   on(event: string, listener: (...args: any[]) => void): this;
 }
 
