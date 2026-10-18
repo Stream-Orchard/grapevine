@@ -1,6 +1,6 @@
 {
   "name": "@streamorchard/grapevine",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Lets desktop apps on the same computer find each other and talk, privately: local sockets, JSON-RPC, pairing and versioned capabilities.",
   "license": "GPL-3.0-only",
   "author": "StreamOrchard",
@@ -52,7 +52,8 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write . && eslint --fix .",
     "types": "node scripts/types.js",
-    "check": "node scripts/types.js --check && tsc -p jsconfig.json"
+    "check": "node scripts/types.js --check && tsc -p jsconfig.json",
+    "released": "node scripts/released.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
