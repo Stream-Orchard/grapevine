@@ -12,7 +12,7 @@ The npm package `@streamorchard/grapevine`: lets desktop apps on the same comput
   - `app-shipped`: after an app ships a release that uses Grapevine
 - Changes go on a branch and end as a pull request; never commit to `main`. Only a release pull request changes `version` in `package.json` or `CHANGELOG.md`.
 - Tests: `npm test`, `npm run test:coverage` (90% lines, 80% branches, 90% functions), `npm run lint`, `npm run check`. Add tests next to similar ones for every new code path: `test/<file>.test.js` follows `src/<file>.js`, and `test/link.test.js` runs real sockets.
-- It must work on Windows, macOS and Linux (CI runs all three). Paths go through `src/paths.js`.
+- It must work on Windows, macOS and Linux (CI runs all three), and on Node 22 (CI runs that too: Electron 38, which Stream Multiview uses, has it). Paths go through `src/paths.js`.
 - No runtime dependencies. Dev dependencies only for linting, formatting and type checks.
 - Example messages and tests use made-up channels and accounts only (`pixelpear`, `pearfan`).
 

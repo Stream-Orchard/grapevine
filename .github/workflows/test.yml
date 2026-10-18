@@ -27,6 +27,20 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  # The oldest Node the package supports (package.json "engines"): Electron 38, which Stream
+  # Multiview uses, comes with Node 22.
+  oldest-node:
+    name: Unit (Node 22)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
   checks:
     name: Lint, types and coverage
     runs-on: ubuntu-latest

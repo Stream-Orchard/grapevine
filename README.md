@@ -246,7 +246,7 @@ npm run check          # the types are up to date, and tsc finds no type errors
 npm run released -- <app id> <version>   # an app shipped a release using Grapevine (see Adding an app)
 ```
 
-CI runs the tests on Windows, macOS and Linux, and lint, types and coverage on Linux.
+CI runs the tests on Windows, macOS and Linux, again on Node 22 (the oldest supported, and the one in Electron 38), and lint, types and coverage on Linux.
 
 **Releasing:**
 
