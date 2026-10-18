@@ -25,10 +25,11 @@ Every app has a **slug** (`a-z`, `0-9` and `-`, up to 40 characters, starting wi
 | Windows | `%APPDATA%\Grapevine`                                                  | the named pipe `\\.\pipe\grapevine-<tag>-<slug>` |
 
 - `GRAPEVINE_DIR` replaces the shared folder (tests, developer copies).
-- `<tag>` is the first 8 hex digits of the SHA-256 of the shared folder's path in lowercase. Pipes are visible to every user of a Windows computer; the tag keeps each user's (and each test folder's) apart.
-- If `<folder>/<a 40-character slug>.sock` would be over 100 bytes (macOS allows 104 for a socket path), the sockets go in `/tmp/grapevine-<uid>-<tag>/` instead.
-- The folder is created with mode `0700`, and an app refuses one owned by another user. Sockets are set to `0600`.
-- An app finds the others by listing the folder (on Windows, the pipes with its `grapevine-<tag>-` prefix). It watches the folder for changes and lists it again every 5 seconds as well.
+- Windows: `<tag>` is the first 16 hex digits of the SHA-256 of the shared folder's path in lowercase, a newline, and the folder's `pipe-secret`: 32 random hex digits in the file of that name, made by the first app that needs it (with `wx`, so two apps starting at once share one). Pipes are visible to every user of a Windows computer, but another user can't read the folder, so they can't work a name out before it exists and take it first.
+  - **Older names:** before this, `<tag>` was the first 8 hex digits of the SHA-256 of the folder's path alone. An app also listens on that name when it's free, and looks for an app under it when that app has no pipe with the new name, so copies with an older Grapevine still find each other. These go in the next protocol version.
+- If `<folder>/<a 40-character slug>.sock` would be over 100 bytes (macOS allows 104 for a socket path), the sockets go in `/tmp/grapevine-<uid>-<8-digit tag of the folder's path>/` instead.
+- The folder is created with mode `0700`, and an app refuses one owned by another user, or a link (in `/tmp`, another user could make either first). Sockets are set to `0600`.
+- An app finds the others by listing the folder (on Windows, the pipes with its `grapevine-<tag>-` prefix, and the older one). It watches the folder for changes and lists it again every 5 seconds as well.
 - A socket left by a crash answers nothing (`ECONNREFUSED`): its app deletes it and listens again when it starts. If something does answer, another copy of the app is running, and the new copy doesn't start its link.
 - An app only listens, and only looks for others, while at least one of its Connected apps switches is on.
 
@@ -93,7 +94,7 @@ The listening app checks it, in this order:
 2. No protocol version in both ranges: `-32003` with `data.protocol` (its own range), and close.
 3. Its switch for that app is off: `-32005`, and close. The app is known by `app.id` or any of `app.formerIds`, and the switch counts under any of them.
 4. **Pairing.**
-   - `pair: true` and it has no key for that app: it makes a new 32-byte random key `K`.
+   - `pair: true` and it has no key for that app: it makes a new 32-byte random key `K`. An app may first ask its user to allow a new pairing: until they do, `-32001` with `data: { reason: "confirm" }`, and close. The connecting app says to allow it there, and tries again (it backs off up to 30 seconds).
    - `pair: true` but it still has a key: `-32001` with `data: { reason: "pair-again", keyHeldBy: "listener" }`, and close. It accepts a new pairing only once its user presses **Pair again**, which deletes its key.
    - `pair: false` and it has no key: `-32001` with `data: { reason: "pair-again", keyHeldBy: "connector" }`, and close. The connecting app's user presses **Pair again** there.
    - Otherwise `K` is the key it has.
@@ -115,7 +116,7 @@ The connecting app checks the reply:
 - it speaks the `protocol` chosen;
 - the `proof` matches its key, or the `key` it was just given when pairing.
 
-If any check fails, it closes the connection. Then it proves it knows the key:
+If any check fails, it closes the connection. A connecting app that asks its user to allow a new pairing closes here too, until they do (without sending `link.auth`, so neither app keeps the key). Then it proves it knows the key:
 
 ```json
 { "jsonrpc": "2.0", "id": 2, "method": "link.auth", "params": { "proof": "<HMAC-SHA256(K, 'client:' + listener nonce), base64>" } }
@@ -151,18 +152,18 @@ When an app quits or crashes, its socket closes and the other app knows at once.
 
 The standard JSON-RPC codes, and Grapevine's:
 
-| Code     | Meaning                                                                                                                                                                      |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-32700` | Not JSON                                                                                                                                                                     |
-| `-32600` | Not a valid request (not an object, no method, a bad id)                                                                                                                     |
-| `-32601` | No such method, or the app doesn't answer it                                                                                                                                 |
-| `-32602` | Invalid params (`data.problems` lists what's wrong)                                                                                                                          |
-| `-32603` | The app failed to answer                                                                                                                                                     |
-| `-32001` | Not paired, or the proof was wrong. `data.reason` is `"pair-again"` when one app has a key the other doesn't, and `data.keyHeldBy` says which: `"listener"` or `"connector"` |
-| `-32002` | The capability wasn't agreed on this connection                                                                                                                              |
-| `-32003` | No version both apps support (`data.protocol` is the sender's range)                                                                                                         |
-| `-32004` | Too many messages                                                                                                                                                            |
-| `-32005` | Switched off in the app's Connected apps                                                                                                                                     |
+| Code     | Meaning                                                                                                                                                                                                                                                      |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `-32700` | Not JSON                                                                                                                                                                                                                                                     |
+| `-32600` | Not a valid request (not an object, no method, a bad id)                                                                                                                                                                                                     |
+| `-32601` | No such method, or the app doesn't answer it                                                                                                                                                                                                                 |
+| `-32602` | Invalid params (`data.problems` lists what's wrong)                                                                                                                                                                                                          |
+| `-32603` | The app failed to answer                                                                                                                                                                                                                                     |
+| `-32001` | Not paired, or the proof was wrong. `data.reason` is `"pair-again"` when one app has a key the other doesn't, and `data.keyHeldBy` says which: `"listener"` or `"connector"`; `"confirm"` while a new pairing waits for the listening app's user to allow it |
+| `-32002` | The capability wasn't agreed on this connection                                                                                                                                                                                                              |
+| `-32003` | No version both apps support (`data.protocol` is the sender's range)                                                                                                                                                                                         |
+| `-32004` | Too many messages                                                                                                                                                                                                                                            |
+| `-32005` | Switched off in the app's Connected apps                                                                                                                                                                                                                     |
 
 ## Capabilities
 
@@ -279,14 +280,14 @@ Claiming a former id only says where to look for a key. The app still has to pro
 
 **Who can connect:**
 
-- **Only programs running as the same user.** The folder and sockets are private to them. Windows pipes are named per user, but any user of the computer can open one; pairing covers that.
+- **Only programs running as the same user.** The folder and sockets are private to them. Windows pipes are named with a secret only that user can read, so another user can't take a name first; one that's in use is listed for every user, and pairing covers someone else opening it. If another user takes the name of an app that isn't running (they can see it while it is), that app can't start its link (`EADDRINUSE`): it doesn't share one.
 - **Never a web page.** Browsers can't open local sockets or named pipes at all.
 - **Never another computer.** Nothing listens on the network.
 
 **What pairing does:**
 
 - **Proves it's the same app as last time.** After the first pairing, both apps prove they hold the same random key on every connection, without sending it.
-- **The first pairing trusts whichever app answers to that id.** It happens only after the user has switched the link on in both apps.
+- **The first pairing trusts whichever app answers to that id.** It happens only after the user has switched the link on in both apps, and, in an app that asks for it, after they allow that pairing (which shows the name and version the other app gives).
 - **Replacing a pairing takes a user's press of Pair again.**
 - **What it can't stop:** a program already running as the user could read the keys, as it could read the apps' own logins.
 

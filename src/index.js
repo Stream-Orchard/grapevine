@@ -17,6 +17,10 @@ const { fileKeyStore, memoryKeyStore } = require('./keys');
 
 const BACKOFF_MS = [1000, 2000, 5000, 10_000, 30_000];
 const POLL_MS = 5000;
+// confirmPairing: Allow (or Pair again) lets a new pairing happen for this long. An app asking to pair shows
+// as 'confirm' until it hasn't asked for this long (it asks again at least every 30 s, BACKOFF_MS).
+const ALLOW_MS = 2 * 60_000;
+const ASKING_MS = 75_000;
 
 /**
  * @typedef {object} LinkOptions
@@ -32,6 +36,7 @@ const POLL_MS = 5000;
  * @property {typeof KNOWN_APPS} [knownApps]
  * @property {Partial<typeof TIMING> & {pollMs?: number, backoffMs?: number[]}} [timing]
  * @property {boolean} [strict] throw on a message that doesn't match its schema (default: when NODE_ENV is "test")
+ * @property {boolean} [confirmPairing] a first pairing needs your user's Allow (allowPairing) or Pair again first
  * @property {(level: 'info' | 'warn' | 'error', text: string) => void} [log]
  */
 
@@ -54,6 +59,9 @@ class Link extends EventEmitter {
     this.knownApps = (opts.knownApps ?? KNOWN_APPS).filter((a) => !mine.has(a.id) && !(a.formerIds ?? []).some((i) => mine.has(i)));
     this.timing = { ...TIMING, pollMs: POLL_MS, backoffMs: BACKOFF_MS, ...opts.timing };
     this.strict = opts.strict ?? process.env.NODE_ENV === 'test';
+    this.confirmPairing = !!opts.confirmPairing;
+    /** @type {Map<string, number>} app id -> until when a new pairing with it may be kept (confirmPairing) */
+    this.mayPairUntil = new Map();
     this.logFn = opts.log ?? (() => {});
     for (const cap of [...Object.keys(this.mine.provides), ...Object.keys(this.mine.uses)]) {
       const listed = [...(this.mine.provides[cap] ?? []), ...(this.mine.uses[cap] ?? [])];
@@ -63,7 +71,7 @@ class Link extends EventEmitter {
     this.conns = new Map();
     /** @type {Set<Connection>} connections still saying hello */
     this.opening = new Set();
-    /** @type {Map<string, {status: string, keyHeldBy?: string, theirProtocol?: any, reason?: string, theirApp?: any}>} why an app isn't connected */
+    /** @type {Map<string, {status: string, keyHeldBy?: string, theirProtocol?: any, reason?: string, theirApp?: any, at?: number}>} why an app isn't connected */
     this.why = new Map();
     this.retry = new Map(); // app id -> { attempts, at }
     this.latest = new Map(); // event -> its last params
@@ -82,6 +90,7 @@ class Link extends EventEmitter {
     await this.listen();
     this.running = true;
     const platform = this.place.platform ?? process.platform;
+    if (platform === 'win32') await this.listenLegacy();
     if (platform !== 'win32') {
       try {
         this.watcher = fs.watch(paths.socketDir(this.place), () => this.pollSoon());
@@ -129,6 +138,24 @@ class Link extends EventEmitter {
     });
   }
 
+  /**
+   * Windows: answers on the pipe name an older Grapevine uses too, so a copy of the other app that has one
+   * still finds this one. Only if that name is free: someone else holding it changes nothing here.
+   * Resolves once it's answering there (or couldn't), so start() only returns when both names are.
+   */
+  listenLegacy() {
+    const server = net.createServer((socket) => this.accept(socket));
+    this.legacyServer = server; // kept at once, so a stop() straight after still closes it
+    return new Promise((resolve) => {
+      server.once('error', (err) => {
+        if (this.legacyServer === server) this.legacyServer = null;
+        this.log('warn', `Not answering on the older pipe name as well: ${err.message}`);
+        resolve();
+      });
+      server.listen(paths.legacyPipe(this.self.slug, this.place), () => resolve());
+    });
+  }
+
   /** Says goodbye to every app and stops listening. */
   async stop() {
     if (!this.running) return;
@@ -138,6 +165,9 @@ class Link extends EventEmitter {
     this.watcher?.close();
     for (const c of [...this.opening, ...this.conns.values()]) c.bye(`${this.self.name} quit`);
     await new Promise((resolve) => this.server.close(() => resolve()));
+    const legacy = this.legacyServer;
+    this.legacyServer = null;
+    if (legacy) await new Promise((resolve) => legacy.close(() => resolve()));
     if ((this.place.platform ?? process.platform) !== 'win32') {
       try {
         fs.unlinkSync(this.socketPath);
@@ -225,7 +255,7 @@ class Link extends EventEmitter {
   }
 
   connect(app) {
-    const socket = net.createConnection(paths.socketPath(app.slug, this.place));
+    const socket = net.createConnection(paths.findSocket(app.slug, this.place));
     const conn = new Connection(socket, this.host(), { initiator: true, expectedId: app.id });
     this.track(conn);
     socket.once('connect', () => conn.start());
@@ -240,7 +270,7 @@ class Link extends EventEmitter {
     conn.on('status', (s) => {
       const id = conn.expectedId ?? (s.peer ? this.resolve(s.peer).id : conn.peerId);
       if (!id) return;
-      this.why.set(id, { ...s, peer: undefined, theirApp: s.peer });
+      this.why.set(id, { ...s, peer: undefined, theirApp: s.peer, at: Date.now() });
       this.changed();
     });
     conn.on('ready', () => this.onReady(conn));
@@ -298,6 +328,14 @@ class Link extends EventEmitter {
       idsOf: (id) => this.idsOf(id),
       resolve: (app) => this.resolve(app),
       findKey: (ids) => this.findKey(ids),
+      ...(this.confirmPairing
+        ? {
+            mayPair: (ids) => ids.some((i) => (this.mayPairUntil.get(i) ?? 0) > Date.now()),
+            paired: (id) => {
+              for (const i of this.idsOf(id)) this.mayPairUntil.delete(i);
+            },
+          }
+        : {}),
       schemas: this.schemas,
       timing: this.timing,
       log: (level, text) => this.log(level, text),
@@ -411,10 +449,20 @@ class Link extends EventEmitter {
     this.changed();
   }
 
-  /** "Pair again" on a card: forgets this app's old key, so the next connection pairs afresh. */
+  /** "Pair again" on a card: forgets this app's old key, so the next connection pairs afresh (allowed, with confirmPairing). */
   pairAgain(appId) {
     const id = this.currentId(appId);
     for (const i of this.idsOf(id)) this.keys.delete(i);
+    this.allowPairing(id);
+  }
+
+  /**
+   * "Allow" on a card, with confirmPairing: a new pairing with that app may happen in the next two minutes.
+   * Without confirmPairing, pairing needs no Allow and this only tries again now.
+   */
+  allowPairing(appId) {
+    const id = this.currentId(appId);
+    if (this.confirmPairing) this.mayPairUntil.set(id, Date.now() + ALLOW_MS);
     this.why.delete(id);
     this.retry.delete(id);
     this.poll();
@@ -426,7 +474,7 @@ class Link extends EventEmitter {
    * round trip and back; otherwise it tries straight away (from this side too, whichever app
    * normally connects) and says why it couldn't.
    * @returns {Promise<{ok: true, ms: number, version: string, text: string} | {ok: false, reason: string, text: string}>}
-   *   reason: 'unknown' | 'off' | 'not-started' | 'not-running' | 'switched-off' | 'pair-again' | 'incompatible' | 'no-answer'
+   *   reason: 'unknown' | 'off' | 'not-started' | 'not-running' | 'switched-off' | 'pair-again' | 'incompatible' | 'confirm' | 'confirm-there' | 'no-answer'
    */
   async test(appId, { timeout = 4000 } = {}) {
     const id = this.currentId(appId);
@@ -462,6 +510,8 @@ class Link extends EventEmitter {
         return { ok: false, reason: 'incompatible', text: incompatible(this.self, why.theirApp ?? app, hs.PROTOCOL, why.theirProtocol ?? hs.PROTOCOL).text };
       }
       if (why?.reason === 'switched-off') return { ok: false, reason: 'switched-off', text: `${app.name} is open, but its Connect switch is off` };
+      if (why?.status === 'confirm') return { ok: false, reason: 'confirm', text: `${app.name} asks to pair: press Allow here` };
+      if (why?.reason === 'confirm-there') return { ok: false, reason: 'confirm-there', text: `Allow the pairing in ${app.name}` };
       return { ok: false, reason: 'no-answer', text: `${app.name} is open, but didn't answer` };
     }
     const started = performance.now();
@@ -504,6 +554,7 @@ class Link extends EventEmitter {
       const paired = this.findKey(this.idsOf(app.id));
       let status = !enabled ? 'off' : conn ? 'connected' : (why?.status ?? 'waiting');
       if (status === 'connected' && !conn) status = 'waiting';
+      if (status === 'confirm' && Date.now() - (why?.at ?? 0) > ASKING_MS) status = 'waiting'; // it stopped asking
       let report = null;
       if (conn) report = compatibility(this.self, conn.peer, conn.agreed);
       else if (status === 'incompatible' && why?.theirProtocol) report = incompatible(this.self, why.theirApp ?? app, hs.PROTOCOL, why.theirProtocol);
@@ -518,8 +569,9 @@ class Link extends EventEmitter {
         installed: this.appDataDir ? isInstalled(app, this.appDataDir) : null,
         enabled,
         status,
-        reason: why?.reason ?? null,
+        reason: status === 'confirm' ? null : (why?.reason ?? null),
         keyHeldBy: status === 'pair-again' ? (why?.keyHeldBy ?? null) : null,
+        asking: status === 'confirm' && why?.theirApp ? { name: why.theirApp.name, version: why.theirApp.version } : null,
         version: conn?.peer.version ?? null,
         report,
         shares: this.sharesWith(app, conn),
