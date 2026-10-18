@@ -582,3 +582,25 @@ test(
     assert.equal(keys.pd.get(RENAMED), null);
   }),
 );
+
+test(
+  'a socket that goes before start() finishes makes start() fail, rather than an exception the app cannot catch',
+  { skip: process.platform === 'win32' && 'pipes have no file to set permissions on' },
+  withPlace(async ({ place }, t) => {
+    const { pd } = pair(place);
+    t(pd);
+    const real = fs.chmodSync;
+    fs.chmodSync = (file, mode) => {
+      if (String(file).endsWith('.sock')) throw Object.assign(new Error(`ENOENT: no such file or directory, chmod '${file}'`), { code: 'ENOENT' });
+      return real(file, mode);
+    };
+    try {
+      await assert.rejects(pd.start(), /ENOENT/);
+      assert.equal(pd.running, false);
+    } finally {
+      fs.chmodSync = real;
+    }
+    await pd.start(); // and it can start once things are back
+    assert.equal(pd.running, true);
+  }),
+);
