@@ -30,7 +30,11 @@ test('a request resolves with its reply, or rejects with its error', async () =>
 
 test('a request with no reply times out; closing rejects what is still waiting', async () => {
   const { rpc } = make();
+  // A request's timer doesn't keep the process alive (in an app, its socket does). Here nothing
+  // else would, and Node 22's test runner would end the file while it waits.
+  const alive = setInterval(() => {}, 1000);
   await assert.rejects(rpc.request('x.slow', {}, { timeout: 20 }), (e) => e.code === CODES.TIMEOUT);
+  clearInterval(alive);
   const waiting = rpc.request('x.get');
   rpc.close();
   await assert.rejects(waiting, (e) => e.code === CODES.CLOSED);
