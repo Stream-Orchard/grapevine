@@ -1,6 +1,9 @@
 # What's new in Grapevine
 
-## 0.7.3 (current)
+## 0.8.0 (current)
+- `link.on('message', …)`, for an activity log: every message your app sends to or receives from another app, the hello included. Each one says when, which app, sent or received, whether it's a request, reply, error or event, its method, its size, and for a reply how long the answer took. Requests, replies and events include what they carry; an error only its code and message; the hello and the pairing proofs nothing, since they hold the pairing keys. Nothing is worked out for it unless the app listens.
+
+## 0.7.3
 - Records that Pear Drops 0.1.6 shipped `drops.farming@1.0` and `players@1.0`: those versions can't change in place now, and Pear Drops' first release with them is 0.1.6, for "update Pear Drops to 0.1.6 or later".
 
 ## 0.7.2
