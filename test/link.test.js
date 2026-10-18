@@ -932,7 +932,25 @@ test(
       [],
       'it answers on the older name',
     );
-    const r = await raw(paths.legacyPipe(MV.slug, place));
+    const diag = {
+      want: paths.legacyPipe(MV.slug, place),
+      current: paths.socketPath(MV.slug, place),
+      addr: mv.legacyServer?.address?.(),
+      listening: mv.legacyServer?.listening,
+      pipes: (() => {
+        try {
+          return require('fs')
+            .readdirSync('\\\\.\\pipe\\')
+            .filter((n) => /stream-multiview|pear-drops/.test(n));
+        } catch (e) {
+          return String(e);
+        }
+      })(),
+      logs,
+    };
+    const r = await raw(paths.legacyPipe(MV.slug, place)).catch((e) => {
+      throw new Error(`${e.message} ${JSON.stringify(diag)}`);
+    });
     const { auth } = await rawHello(r, { app: PD, capabilities: { 'drops.farming': { provides: ['1.0'] }, players: { uses: ['1.0'] } } });
     assert.deepEqual(auth.result, {}, 'paired over the older name');
     r.close();
