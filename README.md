@@ -8,6 +8,8 @@ It's how [**Pear Drops**](https://github.com/Stream-Orchard/pear-drops) tells [*
 
 [![Tests](https://github.com/Stream-Orchard/grapevine/actions/workflows/test.yml/badge.svg)](https://github.com/Stream-Orchard/grapevine/actions/workflows/test.yml) [![npm](https://img.shields.io/npm/v/@streamorchard/grapevine?color=4cf56a)](https://www.npmjs.com/package/@streamorchard/grapevine) ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey) ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 
+https://github.com/user-attachments/assets/1bedcc05-8f5e-4a8b-8b31-21494aff8df9
+
 ---
 
 ## What it does
