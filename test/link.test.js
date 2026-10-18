@@ -922,9 +922,16 @@ test(
   withPlace(async ({ place }, track) => {
     const { mv } = pair(place);
     track(mv);
+    const logs = [];
+    mv.on('log', (level, text) => logs.push(`${level}: ${text}`));
     await mv.start();
     assert.notEqual(paths.legacyPipe(MV.slug, place), paths.socketPath(MV.slug, place));
     assert.ok(paths.listSlugs(place).includes(MV.slug));
+    assert.deepEqual(
+      logs.filter((l) => /older pipe/.test(l)),
+      [],
+      'it answers on the older name',
+    );
     const r = await raw(paths.legacyPipe(MV.slug, place));
     const { auth } = await rawHello(r, { app: PD, capabilities: { 'drops.farming': { provides: ['1.0'] }, players: { uses: ['1.0'] } } });
     assert.deepEqual(auth.result, {}, 'paired over the older name');

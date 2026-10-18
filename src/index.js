@@ -147,8 +147,9 @@ class Link extends EventEmitter {
     const server = net.createServer((socket) => this.accept(socket));
     this.legacyServer = server; // kept at once, so a stop() straight after still closes it
     return new Promise((resolve) => {
-      server.once('error', () => {
+      server.once('error', (err) => {
         if (this.legacyServer === server) this.legacyServer = null;
+        this.log('warn', `Not answering on the older pipe name as well: ${err.message}`);
         resolve();
       });
       server.listen(paths.legacyPipe(this.self.slug, this.place), () => resolve());
