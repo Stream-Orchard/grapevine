@@ -30,4 +30,4 @@ The npm package `@streamorchard/grapevine`: lets desktop apps on the same comput
   - Their `start-change` runs `npm run grapevine:check` (a script for the `grapevine-check` bin, `scripts/check-shipped.js`), which prints the command for any release not yet recorded. Always the script, never `npx grapevine-check`: without Grapevine installed, `npx` would fetch a package of that name from npm.
 - **A new app goes in `src/known-apps.js`:** its logo in `assets/apps/`, and the capabilities it `provides` and `uses`.
 - **Never send logins, tokens or cookies in a capability:** usernames at most. Pictures are `https` addresses.
-- **Apps on the other end:** Pear Drops (`Stream-Orchard/pear-drops`) and Stream Multiview (`GlowingPear/stream-window-multiview`). A capability change usually needs a follow-up there; say so in the pull request.
+- **Apps on the other end:** Pear Drops (`StreamOrchard/pear-drops`) and Stream Multiview (`GlowingPear/stream-window-multiview`). A capability change usually needs a follow-up there; say so in the pull request.
