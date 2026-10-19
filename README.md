@@ -1,4 +1,4 @@
-<p align="center"><img src=".github/assets/hero.png" alt="Grapevine: lets your desktop apps find each other and talk, privately, right on your computer" width="100%"></p>
+<p align="center"><img src=".github/assets/hero.svg" alt="Grapevine: lets your desktop apps find each other and talk, privately, right on your computer. Pear Drops tells Stream Multiview it's farming, and Stream Multiview signs its Kick players out and says so" width="100%"></p>
 
 # Grapevine
 
