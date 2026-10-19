@@ -1,0 +1,14 @@
+# Pull requests for dependency updates: the dev dependencies (linting, formatting, type checks) and the
+# GitHub Actions the workflows use. Weekly, a few at a time.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
