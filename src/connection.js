@@ -47,7 +47,7 @@ const QUEUE_MAX = 100;
 /**
  * What a connection needs from the link that owns it.
  * @typedef {object} Host
- * @property {object} self this app's description (the hello's "app")
+ * @property {Record<string, any>} self this app's description (the hello's "app")
  * @property {{provides: Record<string, string[]>, uses: Record<string, string[]>}} mine
  * @property {{get(id: string): {key: string, pairedAt?: string} | null, set(id: string, key: string): void, delete(id: string): void}} keys
  * @property {(ids: string[]) => boolean} allowed whether this app's switch for that app (under any of its ids) is on
@@ -57,7 +57,7 @@ const QUEUE_MAX = 100;
  * @property {(ids: string[]) => {key: string, pairedAt?: string} | null} findKey the pairing key, filed under any of those ids
  * @property {(ids: string[]) => boolean} [mayPair] whether a new pairing with that app may be kept now (confirmPairing)
  * @property {(id: string) => void} [paired] a new pairing was kept
- * @property {import('./schema').Schemas} schemas
+ * @property {InstanceType<typeof import('./schema').Schemas>} schemas
  * @property {(conn: Connection, method: string, params: any) => Promise<any>} call runs a capability method
  * @property {(conn: Connection, events: string[]) => string[]} subscribe
  * @property {(conn: Connection) => void} [afterSubscribe] sends the latest state to a new subscriber

@@ -67,9 +67,9 @@ class Link extends EventEmitter {
       const listed = [...(this.mine.provides[cap] ?? []), ...(this.mine.uses[cap] ?? [])];
       for (const v of listed) if (!this.schemas.get(cap, hs.parseVersion(v).major)) throw new Error(`createLink: no schema for ${cap} ${v}`);
     }
-    /** @type {Map<string, Connection>} ready connections, by the other app's id */
+    /** @type {Map<string, InstanceType<typeof Connection>>} ready connections, by the other app's id */
     this.conns = new Map();
-    /** @type {Set<Connection>} connections still saying hello */
+    /** @type {Set<InstanceType<typeof Connection>>} connections still saying hello */
     this.opening = new Set();
     /** @type {Map<string, {status: string, keyHeldBy?: string, theirProtocol?: any, reason?: string, theirApp?: any, at?: number}>} why an app isn't connected */
     this.why = new Map();
@@ -102,6 +102,7 @@ class Link extends EventEmitter {
     this.poll();
   }
 
+  /** @returns {Promise<void>} */
   listen() {
     const platform = this.place.platform ?? process.platform;
     return new Promise((resolve, reject) => {
@@ -142,6 +143,7 @@ class Link extends EventEmitter {
    * Windows: answers on the pipe name an older Grapevine uses too, so a copy of the other app that has one
    * still finds this one. Only if that name is free: someone else holding it changes nothing here.
    * Resolves once it's answering there (or couldn't), so start() only returns when both names are.
+   * @returns {Promise<void>}
    */
   listenLegacy() {
     const server = net.createServer((socket) => this.accept(socket));
@@ -164,10 +166,10 @@ class Link extends EventEmitter {
     clearTimeout(this.pollSoonTimer);
     this.watcher?.close();
     for (const c of [...this.opening, ...this.conns.values()]) c.bye(`${this.self.name} quit`);
-    await new Promise((resolve) => this.server.close(() => resolve()));
+    await /** @type {Promise<void>} */ (new Promise((resolve) => this.server.close(() => resolve())));
     const legacy = this.legacyServer;
     this.legacyServer = null;
-    if (legacy) await new Promise((resolve) => legacy.close(() => resolve()));
+    if (legacy) await /** @type {Promise<void>} */ (new Promise((resolve) => legacy.close(() => resolve())));
     if ((this.place.platform ?? process.platform) !== 'win32') {
       try {
         fs.unlinkSync(this.socketPath);
@@ -488,17 +490,19 @@ class Link extends EventEmitter {
       this.why.delete(id);
       const trying = () => [...this.opening].some((c) => (c.expectedId ?? c.peerId) === id);
       if (!trying()) this.connect(app);
-      await new Promise((resolve) => {
-        const done = () => {
-          clearTimeout(timer);
-          this.off('change', check);
-          resolve();
-        };
-        const check = () => (this.conns.has(id) || this.why.has(id) || !trying()) && done();
-        const timer = setTimeout(done, timeout);
-        this.on('change', check);
-        check();
-      });
+      await /** @type {Promise<void>} */ (
+        new Promise((resolve) => {
+          const done = () => {
+            clearTimeout(timer);
+            this.off('change', check);
+            resolve();
+          };
+          const check = () => (this.conns.has(id) || this.why.has(id) || !trying()) && done();
+          const timer = setTimeout(done, timeout);
+          this.on('change', check);
+          check();
+        })
+      );
     }
     const conn = this.conns.get(id);
     if (!conn) {
