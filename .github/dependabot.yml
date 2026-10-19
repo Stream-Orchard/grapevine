@@ -12,3 +12,8 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # All in one pull request: each edits the workflow files, and once one has merged the next can't
+    # merge itself (the workflow token may not write workflows), so they'd wait for a person.
+    groups:
+      github-actions:
+        patterns: ['*']
