@@ -4,12 +4,12 @@
   "description": "Lets desktop apps on the same computer find each other and talk, privately: local sockets, JSON-RPC, pairing and versioned capabilities.",
   "license": "GPL-3.0-only",
   "author": "StreamOrchard",
-  "homepage": "https://github.com/Stream-Orchard/grapevine#readme",
+  "homepage": "https://github.com/StreamOrchard/grapevine#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Stream-Orchard/grapevine.git"
+    "url": "git+https://github.com/StreamOrchard/grapevine.git"
   },
-  "bugs": "https://github.com/Stream-Orchard/grapevine/issues",
+  "bugs": "https://github.com/StreamOrchard/grapevine/issues",
   "keywords": [
     "ipc",
     "local",

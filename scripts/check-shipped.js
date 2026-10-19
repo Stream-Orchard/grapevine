@@ -17,7 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const RECORD_URL = 'https://raw.githubusercontent.com/Stream-Orchard/grapevine/main/schemas/released.json';
+const RECORD_URL = 'https://raw.githubusercontent.com/StreamOrchard/grapevine/main/schemas/released.json';
 const INSTALLED = path.join(__dirname, '..', 'schemas', 'released.json');
 const VERSION = /^v?(\d+)\.(\d+)\.(\d+)$/;
 

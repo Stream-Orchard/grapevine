@@ -4,9 +4,9 @@
 
 Lets desktop apps on the same computer find each other and talk to each other directly. Nothing goes online, and there's no account or server.
 
-It's how [**Pear Drops**](https://github.com/Stream-Orchard/pear-drops) tells [**Stream Multiview**](https://github.com/GlowingPear/stream-window-multiview) when it's farming drops, so multiview's Kick players sign out and leave the drop credit to Pear Drops. Any app that installs it can join in.
+It's how [**Pear Drops**](https://github.com/StreamOrchard/pear-drops) tells [**Stream Multiview**](https://github.com/GlowingPear/stream-window-multiview) when it's farming drops, so multiview's Kick players sign out and leave the drop credit to Pear Drops. Any app that installs it can join in.
 
-[![Tests](https://github.com/Stream-Orchard/grapevine/actions/workflows/test.yml/badge.svg)](https://github.com/Stream-Orchard/grapevine/actions/workflows/test.yml) [![npm](https://img.shields.io/npm/v/@streamorchard/grapevine?color=4cf56a)](https://www.npmjs.com/package/@streamorchard/grapevine) ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey) ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
+[![Tests](https://github.com/StreamOrchard/grapevine/actions/workflows/test.yml/badge.svg)](https://github.com/StreamOrchard/grapevine/actions/workflows/test.yml) [![npm](https://img.shields.io/npm/v/@streamorchard/grapevine?color=4cf56a)](https://www.npmjs.com/package/@streamorchard/grapevine) ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey) ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 
 https://github.com/user-attachments/assets/1bedcc05-8f5e-4a8b-8b31-21494aff8df9
 
