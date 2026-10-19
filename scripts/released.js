@@ -39,7 +39,7 @@ function schemaFiles(dir = path.join(ROOT, 'schemas')) {
 }
 
 /**
- * @param {object} released the contents of released.json
+ * @param {Record<string, any>} released the contents of released.json
  * @param {{id: string, provides: string[], uses: string[]}} app its known-apps entry
  * @param {string} version the app's release
  * @param {Record<string, any>} schemas from schemaFiles()

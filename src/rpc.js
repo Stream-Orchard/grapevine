@@ -47,7 +47,7 @@ class Rpc {
     if (!this.closed) this.send({ jsonrpc: '2.0', id, result: result ?? {} });
   }
 
-  /** @param {string | number | null} id @param {GrapevineError} err */
+  /** @param {string | number | null} id @param {InstanceType<typeof GrapevineError>} err */
   fail(id, err) {
     if (!this.closed) this.send({ jsonrpc: '2.0', id, error: err.toJSON() });
   }
