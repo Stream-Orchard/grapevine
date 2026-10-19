@@ -1,6 +1,9 @@
 # What's new in Grapevine
 
-## 0.9.0 (current)
+## 0.9.1 (current)
+- The GitHub org is now StreamOrchard (it was Stream-Orchard): the package's repository, homepage and issues links, Pear Drops' links in the known apps, and the record `grapevine-check` compares against all use the new name. Nothing apps send changes.
+
+## 0.9.0
 - `confirmPairing`, an opt-in option: a first pairing waits until the user presses Allow (`link.allowPairing(appId)`, for two minutes; Pair again counts as Allow). Until then the card's status is `confirm`, with who is asking, and the other app's card says to allow it there (`confirm-there`). Off by default; older apps just retry.
 - The activity log (`link.on('message')`) shows nothing from inside a message until the other app has proven the pairing (only its kind and size, and the `link.*` handshake's names), leaves out data over 16 KB (`truncated: true`), and skips what the rate limit drops. At most 100 messages wait while the proof finishes.
 - Windows: pipe names include a random secret only this user can read, so another user of the computer can't work one out and take it first. Apps also answer on, and look for, the older name, so copies with an older Grapevine still find them.
