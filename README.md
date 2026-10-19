@@ -282,7 +282,7 @@ npm run released -- <app id> <version>   # an app shipped a release using Grapev
 
 CI runs the tests on Windows, macOS and Linux, again on Node 22 (the oldest supported, and the one in Electron 38), and lint, types and coverage on Linux.
 
-Dependabot opens weekly pull requests for the dev dependencies and the GitHub Actions (`.github/dependabot.yml`). Patch and minor updates, and new major versions of Actions, merge themselves once the required checks pass (`.github/workflows/dependabot-automerge.yml`); other majors wait for review.
+Dependabot opens weekly pull requests for the dev dependencies and the GitHub Actions (`.github/dependabot.yml`; all the Actions ones together, in one). Patch and minor updates, and new major versions of Actions, merge themselves once the required checks pass (`.github/workflows/dependabot-automerge.yml`); other majors wait for review.
 
 **Releasing:**
 
