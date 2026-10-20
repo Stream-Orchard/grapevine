@@ -1,6 +1,9 @@
 # What's new in Grapevine
 
-## 0.9.1 (current)
+## 0.10.0 (current)
+- A new capability, `rewards.daily` 1.0: a daily reward's progress (earning, with minutes of the hour; ready; claimed; and when it resets), and `rewards.daily.show` to bring the app that tracks it to the front with it open. Claiming stays in that app. Pear Drops provides it, for Kick's Daily Reward, and Stream Multiview uses it for a toolbar chest.
+
+## 0.9.1
 - The GitHub org is now StreamOrchard (it was Stream-Orchard): the package's repository, homepage and issues links, Pear Drops' links in the known apps, and the record `grapevine-check` compares against all use the new name. Nothing apps send changes.
 
 ## 0.9.0
