@@ -106,10 +106,28 @@ export type PlayersV1Site = {
   open: Array<Channel>;
 };
 
+// rewards.daily 1.0: A daily reward: watch for an hour a day, then claim it. Enough to show where it's at (a toolbar chest, say) and to ask the app that tracks it to bring it forward. Provided by Pear Drops, for Kick's Daily Reward.
+export type RewardsDailyV1State = {
+  /** Counts up with each change; 0 for a reply to rewards.daily.get */
+  seq: number;
+  at: Timestamp;
+  /** earning: the hour is being watched; ready: waiting to be claimed; claimed: done for today. Any other value, known or not, means there's nothing to show. */
+  state: "earning" | "ready" | "claimed" | "unavailable" | "signed-out" | (string & {});
+  /** The account the reward belongs to */
+  account: Account | null;
+  /** Minutes watched today, while earning */
+  minutes?: number;
+  /** Minutes it takes (60 on Kick) */
+  threshold?: number;
+  /** When today's reward resets (midnight UTC on Kick) */
+  endsAt?: Timestamp | null;
+};
+
 /** Every event, by name: its params. */
 export interface Events {
   "drops.farming.changed": DropsFarmingV1State;
   "players.changed": PlayersV1State;
+  "rewards.daily.changed": RewardsDailyV1State;
 }
 
 /** Every method, by name: its params and result. */
@@ -120,4 +138,9 @@ export interface Methods {
       shown: boolean;
     } };
   "players.get": { params: Empty; result: PlayersV1State };
+  "rewards.daily.get": { params: Empty; result: RewardsDailyV1State };
+  "rewards.daily.show": { params: Empty; result: {
+      /** Whether its window came to the front, with the daily reward open */
+      shown: boolean;
+    } };
 }

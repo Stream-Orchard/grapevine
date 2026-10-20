@@ -1,0 +1,16 @@
+{
+  "event": "rewards.daily.changed",
+  "note": "The hour being watched: 37 of 60 minutes",
+  "params": {
+    "seq": 12,
+    "at": "2026-10-20T20:00:00Z",
+    "state": "earning",
+    "account": {
+      "platform": "kick",
+      "user": "pearfan"
+    },
+    "minutes": 37,
+    "threshold": 60,
+    "endsAt": "2026-10-21T00:00:00Z"
+  }
+}

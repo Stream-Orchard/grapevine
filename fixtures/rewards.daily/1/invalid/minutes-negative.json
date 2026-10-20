@@ -1,0 +1,11 @@
+{
+  "event": "rewards.daily.changed",
+  "params": {
+    "seq": 1,
+    "at": "2026-10-20T20:00:00Z",
+    "state": "earning",
+    "account": null,
+    "minutes": -5,
+    "threshold": 60
+  }
+}

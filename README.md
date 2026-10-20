@@ -216,6 +216,7 @@ Example messages for every capability version, good and bad, are in `@streamorch
 | Capability          | Provided by      | What it says                                                                                                                                                                       |
 | ------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `drops.farming` 1.0 | Pear Drops       | Whether it's farming: the channel, stream and drop, with pictures and every reward's state and when it unlocks, enough for a widget. Also `show`, to bring Pear Drops to the front |
+| `rewards.daily` 1.0 | Pear Drops       | A daily reward's progress: earning (minutes of the hour), ready, or claimed, and when it resets. Also `show`, to bring Pear Drops forward with it open                             |
 | `players` 1.0       | Stream Multiview | Its players by site: signed in or not, and which channels are open                                                                                                                 |
 
 To add one:

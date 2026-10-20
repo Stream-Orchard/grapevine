@@ -1,0 +1,13 @@
+{
+  "event": "rewards.daily.changed",
+  "note": "Only the required fields: the rest are optional",
+  "params": {
+    "seq": 14,
+    "at": "2026-10-20T20:25:00Z",
+    "state": "claimed",
+    "account": {
+      "platform": "kick",
+      "user": "pearfan"
+    }
+  }
+}
