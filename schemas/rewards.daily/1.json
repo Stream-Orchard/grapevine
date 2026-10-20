@@ -1,0 +1,93 @@
+{
+  "capability": "rewards.daily",
+  "major": 1,
+  "minor": 0,
+  "description": "A daily reward: watch for an hour a day, then claim it. Enough to show where it's at (a toolbar chest, say) and to ask the app that tracks it to bring it forward. Provided by Pear Drops, for Kick's Daily Reward.",
+  "events": {
+    "rewards.daily.changed": {
+      "$ref": "#State"
+    }
+  },
+  "methods": {
+    "rewards.daily.get": {
+      "params": {
+        "$ref": "common:Empty"
+      },
+      "result": {
+        "$ref": "#State"
+      }
+    },
+    "rewards.daily.show": {
+      "params": {
+        "$ref": "common:Empty"
+      },
+      "result": {
+        "type": "object",
+        "required": ["shown"],
+        "properties": {
+          "shown": {
+            "type": "boolean",
+            "description": "Whether its window came to the front, with the daily reward open"
+          }
+        }
+      }
+    }
+  },
+  "defs": {
+    "State": {
+      "type": "object",
+      "required": ["seq", "at", "state", "account"],
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Counts up with each change; 0 for a reply to rewards.daily.get"
+        },
+        "at": {
+          "$ref": "common:Timestamp"
+        },
+        "state": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "x-open": ["earning", "ready", "claimed", "unavailable", "signed-out"],
+          "description": "earning: the hour is being watched; ready: waiting to be claimed; claimed: done for today. Any other value, known or not, means there's nothing to show."
+        },
+        "account": {
+          "anyOf": [
+            {
+              "$ref": "common:Account"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The account the reward belongs to"
+        },
+        "minutes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1440,
+          "description": "Minutes watched today, while earning"
+        },
+        "threshold": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1440,
+          "description": "Minutes it takes (60 on Kick)"
+        },
+        "endsAt": {
+          "anyOf": [
+            {
+              "$ref": "common:Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "When today's reward resets (midnight UTC on Kick)"
+        }
+      }
+    }
+  }
+}

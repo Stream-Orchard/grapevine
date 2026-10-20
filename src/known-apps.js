@@ -38,7 +38,7 @@ const KNOWN_APPS = [
     homepage: 'https://github.com/StreamOrchard/pear-drops',
     download: 'https://github.com/StreamOrchard/pear-drops/releases/latest',
     dataFolder: 'Pear Drops',
-    provides: ['drops.farming'],
+    provides: ['drops.farming', 'rewards.daily'],
     uses: ['players'],
     firstRelease: { ...RELEASED['com.streamorchard.peardrops'] },
   },
@@ -53,7 +53,7 @@ const KNOWN_APPS = [
     download: 'https://github.com/GlowingPear/stream-window-multiview/releases/latest',
     dataFolder: 'Stream Multiview',
     provides: ['players'],
-    uses: ['drops.farming'],
+    uses: ['drops.farming', 'rewards.daily'],
     firstRelease: { ...RELEASED['com.glowingpear.streammultiview'] },
   },
 ];

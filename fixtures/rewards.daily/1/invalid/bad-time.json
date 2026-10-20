@@ -1,0 +1,9 @@
+{
+  "event": "rewards.daily.changed",
+  "params": {
+    "seq": 1,
+    "at": "tonight",
+    "state": "ready",
+    "account": null
+  }
+}

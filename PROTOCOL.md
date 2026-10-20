@@ -215,6 +215,24 @@ Event `drops.farming.changed`, and `drops.farming.get` answers with the same: th
 
 `drops.farming.show {}` asks the drops app to bring its window to the front, for a click on that widget. It replies `{ shown }`.
 
+### `rewards.daily` 1.0
+
+A daily reward: watch for an hour a day, then claim it. Enough for another app to show where it's at, a toolbar chest say, and to bring the tracking app forward to claim it. Provided by Pear Drops, for Kick's Daily Reward. Claiming stays in the providing app: there's no claim method.
+
+Event `rewards.daily.changed`, and `rewards.daily.get` answers with the same: the whole state, below. `rewards.daily.show` is further down.
+
+| Field       |                                                                                                                                    |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `state`     | `earning` (the hour is being watched), `ready` (waiting to be claimed), `claimed`, `unavailable`, `signed-out`, or one added later |
+| `account`   | The account the reward belongs to, or `null`. Show it only for the account signed in on the other side                             |
+| `minutes`   | Optional: minutes watched today, while `earning`                                                                                   |
+| `threshold` | Optional: the minutes it takes (60 on Kick)                                                                                        |
+| `endsAt`    | Optional: when today's reward resets (midnight UTC on Kick), or `null`                                                             |
+
+A `state` an app doesn't know means "nothing to show".
+
+`rewards.daily.show {}` asks the providing app to come to the front with the daily reward open, for a click on that chest. It replies `{ shown }`.
+
 ### `players` 1.0
 
 An app's stream players, by site. Provided by Stream Multiview.

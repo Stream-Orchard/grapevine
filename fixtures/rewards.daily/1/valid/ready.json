@@ -1,0 +1,15 @@
+{
+  "event": "rewards.daily.changed",
+  "params": {
+    "seq": 13,
+    "at": "2026-10-20T20:23:00Z",
+    "state": "ready",
+    "account": {
+      "platform": "kick",
+      "user": "pearfan"
+    },
+    "minutes": 60,
+    "threshold": 60,
+    "endsAt": "2026-10-21T00:00:00Z"
+  }
+}
