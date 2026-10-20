@@ -1,6 +1,9 @@
 # What's new in Grapevine
 
-## 0.10.0 (current)
+## 0.10.1 (current)
+- Records that Pear Drops 0.1.12 shipped `rewards.daily@1.0`: that version can't change in place now, and Pear Drops' first release with it is 0.1.12, for "update Pear Drops to 0.1.12 or later".
+
+## 0.10.0
 - A new capability, `rewards.daily` 1.0: a daily reward's progress (earning, with minutes of the hour; ready; claimed; and when it resets), and `rewards.daily.show` to bring the app that tracks it to the front with it open. Claiming stays in that app. Pear Drops provides it, for Kick's Daily Reward, and Stream Multiview uses it for a toolbar chest.
 
 ## 0.9.1
