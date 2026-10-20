@@ -24,7 +24,8 @@
     "com.glowingpear.streammultiview": {
       "drops.farming@1.0": "0.3.11",
       "players@1.0": "0.3.11",
-      "protocol@1": "0.3.11"
+      "protocol@1": "0.3.11",
+      "rewards.daily@1.0": "0.3.13"
     }
   }
 }
