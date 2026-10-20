@@ -1,6 +1,9 @@
 # What's new in Grapevine
 
-## 0.10.1 (current)
+## 0.10.2 (current)
+- Records that Stream Multiview 0.3.13 shipped `rewards.daily@1.0`: Stream Multiview's first release with it is 0.3.13, for "update Stream Multiview to 0.3.13 or later".
+
+## 0.10.1
 - Records that Pear Drops 0.1.12 shipped `rewards.daily@1.0`: that version can't change in place now, and Pear Drops' first release with it is 0.1.12, for "update Pear Drops to 0.1.12 or later".
 
 ## 0.10.0
