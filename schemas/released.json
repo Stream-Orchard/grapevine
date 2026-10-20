@@ -8,13 +8,18 @@
     "players@1": {
       "minor": 0,
       "sha256": "a442285b080e2f20ac0ea8224e9f326e525c0e7277ff0015c7948d111ff5d5f6"
+    },
+    "rewards.daily@1": {
+      "minor": 0,
+      "sha256": "41091a2654ffac943b59b8ac08e529bb87fdf37ddb99d911e723797c80b62c77"
     }
   },
   "firstRelease": {
     "com.streamorchard.peardrops": {
       "drops.farming@1.0": "0.1.6",
       "players@1.0": "0.1.6",
-      "protocol@1": "0.1.6"
+      "protocol@1": "0.1.6",
+      "rewards.daily@1.0": "0.1.12"
     },
     "com.glowingpear.streammultiview": {
       "drops.farming@1.0": "0.3.11",
